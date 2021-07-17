@@ -47,6 +47,22 @@ public class ChipDeviceController {
   }
 
   public void pairDevice(BluetoothGatt bleServer, long deviceId, long setupPincode) {
+    pairDevice(bleServer, deviceId, setupPincode, null);
+  }
+
+  /**
+   * Pair a device connected through BLE.
+   *
+   * <p>TODO(#7985): Annotate csrNonce as Nullable.
+   *
+   * @param bleServer the BluetoothGatt representing the BLE connection to the device
+   * @param deviceId the node ID to assign to the device
+   * @param setupPincode the pincode for the device
+   * @param csrNonce the 32-byte CSR nonce to use, or null if we want to use an internally randomly
+   *     generated CSR nonce.
+   */
+  public void pairDevice(
+      BluetoothGatt bleServer, long deviceId, long setupPincode, byte[] csrNonce) {
     if (connectionId == 0) {
       bleGatt = bleServer;
 
@@ -59,7 +75,7 @@ public class ChipDeviceController {
 
       Log.d(TAG, "Bluetooth connection added with ID: " + connectionId);
       Log.d(TAG, "Pairing device with ID: " + deviceId);
-      pairDevice(deviceControllerPtr, deviceId, connectionId, setupPincode);
+      pairDevice(deviceControllerPtr, deviceId, connectionId, setupPincode, csrNonce);
     } else {
       Log.e(TAG, "Bluetooth connection already in use.");
       completionListener.onError(new Exception("Bluetooth connection already in use."));
@@ -74,16 +90,8 @@ public class ChipDeviceController {
     pairTestDeviceWithoutSecurity(deviceControllerPtr, ipAddress);
   }
 
-  public void pairDevice(long deviceId, int connectionId, long pinCode) {
-    pairDevice(deviceControllerPtr, deviceId, connectionId, pinCode);
-  }
-
-  public void sendWiFiCredentials(String ssid, String password) {
-    sendWiFiCredentials(deviceControllerPtr, ssid, password);
-  }
-
-  public void sendThreadCredentials(int channel, int panId, byte[] xpanId, byte[] masterKey) {
-    sendThreadCredentials(deviceControllerPtr, channel, panId, xpanId, masterKey);
+  public long getDevicePointer(long deviceId) {
+    return getDevicePointer(deviceControllerPtr, deviceId);
   }
 
   public boolean disconnectDevice(long deviceId) {
@@ -98,18 +106,6 @@ public class ChipDeviceController {
     completionListener.onSendMessageComplete(message);
   }
 
-  public void onNetworkCredentialsRequested() {
-    if (completionListener != null) {
-      completionListener.onNetworkCredentialsRequested();
-    }
-  }
-
-  public void onOperationalCredentialsRequested(byte[] csr) {
-    if (completionListener != null) {
-      completionListener.onOperationalCredentialsRequested(csr);
-    }
-  }
-
   public void onStatusUpdate(int status) {
     if (completionListener != null) {
       completionListener.onStatusUpdate(status);
@@ -122,9 +118,21 @@ public class ChipDeviceController {
     }
   }
 
+  public void onOpCSRGenerationComplete(byte[] errorCode) {
+    if (completionListener != null) {
+      completionListener.onOpCSRGenerationComplete(errorCode);
+    }
+  }
+
   public void onPairingDeleted(int errorCode) {
     if (completionListener != null) {
       completionListener.onPairingDeleted(errorCode);
+    }
+  }
+
+  public void onNetworkCommissioningComplete(int errorCode) {
+    if (completionListener != null) {
+      completionListener.onNetworkCommissioningComplete(errorCode);
     }
   }
 
@@ -176,12 +184,20 @@ public class ChipDeviceController {
     return getIpAddress(deviceControllerPtr, deviceId);
   }
 
+  public void updateAddress(long deviceId, String address, int port) {
+    updateAddress(deviceControllerPtr, deviceId, address, port);
+  }
+
   public void sendMessage(long deviceId, String message) {
     sendMessage(deviceControllerPtr, deviceId, message);
   }
 
   public void sendCommand(long deviceId, ChipCommandType command, int value) {
     sendCommand(deviceControllerPtr, deviceId, command, value);
+  }
+
+  public void enableThreadNetwork(long deviceId, byte[] operationalDataset) {
+    enableThreadNetwork(deviceControllerPtr, deviceId, operationalDataset);
   }
 
   public boolean openPairingWindow(long deviceId, int duration) {
@@ -195,16 +211,13 @@ public class ChipDeviceController {
   private native long newDeviceController();
 
   private native void pairDevice(
-      long deviceControllerPtr, long deviceId, int connectionId, long pinCode);
+      long deviceControllerPtr, long deviceId, int connectionId, long pinCode, byte[] csrNonce);
 
   private native void unpairDevice(long deviceControllerPtr, long deviceId);
 
+  private native long getDevicePointer(long deviceControllerPtr, long deviceId);
+
   private native void pairTestDeviceWithoutSecurity(long deviceControllerPtr, String ipAddress);
-
-  private native void sendWiFiCredentials(long deviceControllerPtr, String ssid, String password);
-
-  private native void sendThreadCredentials(
-      long deviceControllerPtr, int channel, int panId, byte[] xpanId, byte[] masterKey);
 
   private native boolean disconnectDevice(long deviceControllerPtr, long deviceId);
 
@@ -212,14 +225,22 @@ public class ChipDeviceController {
 
   private native String getIpAddress(long deviceControllerPtr, long deviceId);
 
+  private native void updateAddress(
+      long deviceControllerPtr, long deviceId, String address, int port);
+
   private native void sendMessage(long deviceControllerPtr, long deviceId, String message);
 
   private native void sendCommand(
       long deviceControllerPtr, long deviceId, ChipCommandType command, int value);
 
+  private native void enableThreadNetwork(
+      long deviceControllerPtr, long deviceId, byte[] operationalDataset);
+
   private native boolean openPairingWindow(long deviceControllerPtr, long deviceId, int duration);
 
   private native boolean isActive(long deviceControllerPtr, long deviceId);
+
+  public static native void setKeyValueStoreManager(KeyValueStoreManager manager);
 
   static {
     System.loadLibrary("CHIPController");
@@ -244,12 +265,6 @@ public class ChipDeviceController {
     /** Notifies the completion of "SendMessage" echo command. */
     void onSendMessageComplete(String message);
 
-    /** Notifies that the device is ready to receive Wi-Fi network credentials. */
-    void onNetworkCredentialsRequested();
-
-    /** Notifies that the device is ready to receive operational credentials. */
-    void onOperationalCredentialsRequested(byte[] csr);
-
     /** Notifies the pairing status. */
     void onStatusUpdate(int status);
 
@@ -259,6 +274,9 @@ public class ChipDeviceController {
     /** Notifies the deletion of pairing session. */
     void onPairingDeleted(int errorCode);
 
+    /** Notifies the completion of network commissioning */
+    void onNetworkCommissioningComplete(int errorCode);
+
     /** Notifies that the Chip connection has been closed. */
     void onNotifyChipConnectionClosed();
 
@@ -267,5 +285,8 @@ public class ChipDeviceController {
 
     /** Notifies the listener of the error. */
     void onError(Throwable error);
+
+    /** Notifies the Commissioner when the OpCSR for the Comissionee is generated. */
+    void onOpCSRGenerationComplete(byte[] errorCode);
   }
 }

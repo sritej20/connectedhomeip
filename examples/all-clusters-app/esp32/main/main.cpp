@@ -15,7 +15,6 @@
  *    limitations under the License.
  */
 
-#include "AppDelegate.h"
 #include "BluetoothWidget.h"
 #include "Button.h"
 #include "CHIPDeviceManager.h"
@@ -24,10 +23,8 @@
 #include "Globals.h"
 #include "LEDWidget.h"
 #include "ListScreen.h"
-#include "OnboardingCodesUtil.h"
 #include "QRCodeScreen.h"
 #include "ScreenManager.h"
-#include "Server.h"
 #include "WiFiWidget.h"
 #include "esp_heap_caps_init.h"
 #include "esp_log.h"
@@ -37,10 +34,8 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "gen/attribute-id.h"
-#include "gen/attribute-type.h"
-#include "gen/cluster-id.h"
 #include "nvs_flash.h"
+#include "shell_extension/launch.h"
 
 #include <cmath>
 #include <cstdio>
@@ -48,14 +43,25 @@
 #include <string>
 #include <vector>
 
+#include <app/common/gen/att-storage.h>
+#include <app/common/gen/attribute-id.h>
+#include <app/common/gen/attribute-type.h>
+#include <app/common/gen/cluster-id.h>
+#include <app/server/AppDelegate.h>
+#include <app/server/Mdns.h>
+#include <app/server/OnboardingCodesUtil.h>
+#include <app/server/Server.h>
+#include <app/util/af-types.h>
+#include <app/util/af.h>
+#include <lib/shell/Engine.h>
 #include <platform/CHIPDeviceLayer.h>
-#include <server/Mdns.h>
 #include <setup_payload/ManualSetupPayloadGenerator.h>
 #include <setup_payload/QRCodeSetupPayloadGenerator.h>
 #include <support/CHIPMem.h>
 #include <support/ErrorStr.h>
 
 #include <app/clusters/door-lock-server/door-lock-server.h>
+#include <app/clusters/on-off-server/on-off-server.h>
 #include <app/clusters/temperature-measurement-server/temperature-measurement-server.h>
 
 using namespace ::chip;
@@ -78,6 +84,10 @@ using namespace ::chip::DeviceLayer;
 #elif CONFIG_DEVICE_TYPE_ESP32_DEVKITC
 
 #define STATUS_LED_GPIO_NUM GPIO_NUM_2 // Use LED1 (blue LED) as status LED on DevKitC
+
+#elif CONFIG_DEVICE_TYPE_ESP32_C3_DEVKITM
+
+#define STATUS_LED_GPIO_NUM GPIO_NUM_8
 
 #else // !CONFIG_DEVICE_TYPE_ESP32_DEVKITC
 
@@ -153,6 +163,12 @@ public:
     {
         return std::get<1>(std::get<1>(std::get<1>(devices[deviceIndex])[endpointIndex])[clusterIndex])[attributeIndex];
     }
+    bool IsBooleanAttribute()
+    {
+        auto & attribute = this->attribute();
+        auto & value     = std::get<1>(attribute);
+        return value == "On" || value == "Off";
+    }
     virtual std::string GetTitle()
     {
         auto & attribute = this->attribute();
@@ -162,8 +178,15 @@ public:
         snprintf(buffer, sizeof(buffer), "%s : %s", name.c_str(), value.c_str());
         return buffer;
     }
-    virtual int GetItemCount() { return 2; }
-    virtual std::string GetItemText(int i) { return i == 0 ? "+" : "-"; }
+    virtual int GetItemCount() { return IsBooleanAttribute() ? 1 : 2; }
+    virtual std::string GetItemText(int i)
+    {
+        if (IsBooleanAttribute())
+        {
+            return "Toggle";
+        }
+        return i == 0 ? "+" : "-";
+    }
     virtual void ItemAction(int i)
     {
         auto & attribute = this->attribute();
@@ -180,9 +203,22 @@ public:
             if (name == "Temperature")
             {
                 // update the temp attribute here for hardcoded endpoint 1
-                emberAfPluginTemperatureMeasurementSetValueCallback(1, static_cast<int16_t>(n * 100));
+                emberAfTemperatureMeasurementClusterSetMeasuredValueCallback(1, static_cast<int16_t>(n * 100));
             }
             value = buffer;
+        }
+        else if (IsBooleanAttribute())
+        {
+            auto & name    = std::get<0>(attribute);
+            auto & cluster = std::get<0>(std::get<1>(std::get<1>(devices[deviceIndex])[endpointIndex])[i]);
+            value          = (value == "On") ? "Off" : "On";
+
+            if (name == "OnOff" && cluster == "OnOff")
+            {
+                uint8_t attributeValue = (value == "On") ? 1 : 0;
+                emberAfWriteServerAttribute(endpointIndex + 1, ZCL_ON_OFF_CLUSTER_ID, ZCL_ON_OFF_ATTRIBUTE_ID,
+                                            (uint8_t *) &attributeValue, ZCL_BOOLEAN_ATTRIBUTE_TYPE);
+            }
         }
         else
         {
@@ -311,8 +347,8 @@ public:
         }
         else if (i == 2)
         {
-            app::Mdns::AdvertiseCommisionable();
-            OpenDefaultPairingWindow(ResetAdmins::kNo, PairingWindowAdvertisement::kMdns);
+            app::Mdns::AdvertiseCommissionableNode();
+            OpenDefaultPairingWindow(ResetAdmins::kYes, PairingWindowAdvertisement::kMdns);
         }
     }
 
@@ -335,6 +371,14 @@ public:
 
 #endif // CONFIG_DEVICE_TYPE_M5STACK
 
+void SetupInitialLevelControlValues(chip::EndpointId endpointId)
+{
+    uint8_t level = UINT8_MAX;
+
+    emberAfWriteAttribute(endpointId, ZCL_LEVEL_CONTROL_CLUSTER_ID, ZCL_CURRENT_LEVEL_ATTRIBUTE_ID, CLUSTER_MASK_SERVER, &level,
+                          ZCL_INT8U_ATTRIBUTE_TYPE);
+}
+
 void SetupPretendDevices()
 {
     AddDevice("Watch");
@@ -348,12 +392,24 @@ void SetupPretendDevices()
     AddCluster("Step Counter");
     AddAttribute("Steps", "9876");
 
+    AddDevice("Light Bulb");
+    AddEndpoint("1");
+    AddCluster("OnOff");
+    AddAttribute("OnOff", "Off");
+    AddCluster("Level Control");
+    AddAttribute("Current Level", "255");
+    AddEndpoint("2");
+    AddCluster("OnOff");
+    AddAttribute("OnOff", "Off");
+    AddCluster("Level Control");
+    AddAttribute("Current Level", "255");
+
     AddDevice("Thermometer");
     AddEndpoint("External");
     AddCluster("Thermometer");
     AddAttribute("Temperature", "21");
     // write the temp attribute
-    emberAfPluginTemperatureMeasurementSetValueCallback(1, static_cast<int16_t>(21 * 100));
+    emberAfTemperatureMeasurementClusterSetMeasuredValueCallback(1, static_cast<int16_t>(21 * 100));
 
     AddDevice("Door Lock");
     AddEndpoint("Default");
@@ -409,6 +465,7 @@ std::string createSetupPayload()
         ESP_LOGE(TAG, "Couldn't get discriminator: %s", ErrorStr(err));
         return result;
     }
+    ESP_LOGI(TAG, "Setup discriminator: %u (0x%x)", discriminator, discriminator);
 
     uint32_t setupPINCode;
     err = ConfigurationMgr().GetSetupPinCode(setupPINCode);
@@ -417,6 +474,7 @@ std::string createSetupPayload()
         ESP_LOGE(TAG, "Couldn't get setupPINCode: %s", ErrorStr(err));
         return result;
     }
+    ESP_LOGI(TAG, "Setup PIN code: %u (0x%x)", setupPINCode, setupPINCode);
 
     uint16_t vendorId;
     err = ConfigurationMgr().GetVendorId(vendorId);
@@ -452,12 +510,12 @@ std::string createSetupPayload()
 
         size_t tlvDataLen = sizeof(gw_ip);
         uint8_t tlvDataStart[tlvDataLen];
-        err = generator.payloadBase41Representation(result, tlvDataStart, tlvDataLen);
+        err = generator.payloadBase38Representation(result, tlvDataStart, tlvDataLen);
     }
     else
     {
         QRCodeSetupPayloadGenerator generator(payload);
-        err = generator.payloadBase41Representation(result);
+        err = generator.payloadBase38Representation(result);
     }
 
     {
@@ -473,8 +531,8 @@ std::string createSetupPayload()
             ESP_LOGE(TAG, "Failed to get decimal setup code");
         }
 
-        payload.requiresCustomFlow = 1;
-        generator                  = ManualSetupPayloadGenerator(payload);
+        payload.commissioningFlow = CommissioningFlow::kCustom;
+        generator                 = ManualSetupPayloadGenerator(payload);
 
         if (generator.payloadDecimalStringRepresentation(outCode) == CHIP_NO_ERROR)
         {
@@ -543,6 +601,10 @@ extern "C" void app_main()
         return;
     }
 
+#if CONFIG_ENABLE_CHIP_SHELL
+    chip::LaunchShell();
+#endif // CONFIG_ENABLE_CHIP_SHELL
+
     CHIPDeviceManager & deviceMgr = CHIPDeviceManager::GetInstance();
 
     err = deviceMgr.Init(&EchoCallbacks);
@@ -565,6 +627,8 @@ extern "C" void app_main()
     InitServer(&callbacks);
 
     SetupPretendDevices();
+    SetupInitialLevelControlValues(/* endpointId = */ 1);
+    SetupInitialLevelControlValues(/* endpointId = */ 2);
 
     std::string qrCodeText = createSetupPayload();
     ESP_LOGI(TAG, "QR CODE Text: '%s'", qrCodeText.c_str());
@@ -621,6 +685,17 @@ extern "C" void app_main()
             ->Item("QR Code",
                    [=]() {
                        ESP_LOGI(TAG, "Opening QR code screen");
+                       ESP_LOGI(TAG, "QR CODE Text: '%s'", qrCodeText.c_str());
+                       uint16_t discriminator;
+                       if (ConfigurationMgr().GetSetupDiscriminator(discriminator) == CHIP_NO_ERROR)
+                       {
+                           ESP_LOGI(TAG, "Setup discriminator: %u (0x%x)", discriminator, discriminator);
+                       }
+                       uint32_t setupPINCode;
+                       if (ConfigurationMgr().GetSetupPinCode(setupPINCode) == CHIP_NO_ERROR)
+                       {
+                           ESP_LOGI(TAG, "Setup PIN code: %u (0x%x)", setupPINCode, setupPINCode);
+                       }
                        ScreenManager::PushScreen(chip::Platform::New<QRCodeScreen>(qrCodeText));
                    })
             ->Item("Setup",
@@ -690,4 +765,9 @@ extern "C" void app_main()
 
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
+}
+
+bool lowPowerClusterSleep()
+{
+    return true;
 }

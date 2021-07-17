@@ -29,15 +29,15 @@
 #include <mbedtls/threading.h>
 
 #include <platform/CHIPDeviceLayer.h>
+#include <platform/KeyValueStoreManager.h>
 #include <support/CHIPMem.h>
 #include <support/CHIPPlatformMemory.h>
 
 #include <AppTask.h>
 
 #include "AppConfig.h"
-#include "DataModelHandler.h"
-#include "Server.h"
 #include "init_efrPlatform.h"
+#include <app/server/Server.h>
 
 #if DISPLAY_ENABLED
 #include "lcd.h"
@@ -79,6 +79,11 @@ void appError(int err)
         ;
 }
 
+void appError(CHIP_ERROR error)
+{
+    appError(static_cast<int>(chip::ChipError::AsInteger(error)));
+}
+
 // ================================================================================
 // FreeRTOS Callbacks
 // ================================================================================
@@ -95,8 +100,6 @@ extern "C" void vApplicationIdleHook(void)
 // ================================================================================
 int main(void)
 {
-    int ret = CHIP_ERROR_MAX;
-
     init_efrPlatform();
 
 #if PW_RPC_ENABLED
@@ -116,14 +119,24 @@ int main(void)
 
     // Init Chip memory management before the stack
     chip::Platform::MemoryInit();
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgrImpl().Init();
 
-    ret = PlatformMgr().InitChipStack();
+    CHIP_ERROR ret = PlatformMgr().InitChipStack();
     if (ret != CHIP_NO_ERROR)
     {
         EFR32_LOG("PlatformMgr().InitChipStack() failed");
         appError(ret);
     }
-    chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName("EFR32_LIGHT");
+    chip::DeviceLayer::ConnectivityMgr().SetBLEDeviceName("EFR32_WINDOW");
+
+    EFR32_LOG("Starting Platform Manager Event Loop");
+    ret = PlatformMgr().StartEventLoopTask();
+    if (ret != CHIP_NO_ERROR)
+    {
+        EFR32_LOG("PlatformMgr().StartEventLoopTask() failed");
+        appError(ret);
+    }
+
 #if CHIP_ENABLE_OPENTHREAD
     EFR32_LOG("Initializing OpenThread stack");
     ret = ThreadStackMgr().InitThreadStack();
@@ -139,17 +152,7 @@ int main(void)
         EFR32_LOG("ConnectivityMgr().SetThreadDeviceType() failed");
         appError(ret);
     }
-#endif // CHIP_ENABLE_OPENTHREAD
 
-    EFR32_LOG("Starting Platform Manager Event Loop");
-    ret = PlatformMgr().StartEventLoopTask();
-    if (ret != CHIP_NO_ERROR)
-    {
-        EFR32_LOG("PlatformMgr().StartEventLoopTask() failed");
-        appError(ret);
-    }
-
-#if CHIP_ENABLE_OPENTHREAD
     EFR32_LOG("Starting OpenThread task");
 
     // Start OpenThread task

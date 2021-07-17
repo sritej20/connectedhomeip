@@ -26,11 +26,11 @@
 #include "AttributeDataVersionList.h"
 #include "Builder.h"
 #include "Parser.h"
+#include <app/util/basic-types.h>
 #include <core/CHIPCore.h>
 #include <core/CHIPTLV.h>
 #include <support/CodeUtils.h>
 #include <support/logging/CHIPLogging.h>
-#include <util/basic-types.h>
 
 namespace chip {
 namespace app {
@@ -148,6 +148,9 @@ public:
      *  @return A reference to *this
      */
     WriteRequest::Builder & MoreChunkedMessages(const bool aMoreChunkedMessages);
+
+    AttributeDataList::Builder & GetAttributeDataListBuilder();
+
     /**
      *  @brief Mark the end of this WriteRequest
      *

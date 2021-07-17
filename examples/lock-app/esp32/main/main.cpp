@@ -15,10 +15,9 @@
  *    limitations under the License.
  */
 
+#include "AppTask.h"
 #include "CHIPDeviceManager.h"
-#include "DataModelHandler.h"
 #include "DeviceCallbacks.h"
-#include "Server.h"
 #include "esp_heap_caps_init.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -28,6 +27,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include "shell_extension/launch.h"
+#include <app/server/Server.h>
 
 #include <cmath>
 #include <cstdio>
@@ -35,6 +36,12 @@
 #include <vector>
 
 #include <support/ErrorStr.h>
+
+#if CONFIG_ENABLE_PW_RPC
+#include "PigweedLogger.h"
+#include "Rpc.h"
+#endif
+
 using namespace ::chip;
 using namespace ::chip::DeviceManager;
 using namespace ::chip::DeviceLayer;
@@ -54,9 +61,17 @@ extern "C" void app_main()
         return;
     }
 
+#if CONFIG_ENABLE_PW_RPC
+    chip::rpc::Init();
+#endif
+
     ESP_LOGI(TAG, "==================================================");
     ESP_LOGI(TAG, "chip-esp32-lock-example starting");
     ESP_LOGI(TAG, "==================================================");
+
+#if CONFIG_ENABLE_CHIP_SHELL
+    chip::LaunchShell();
+#endif
 
     CHIPDeviceManager & deviceMgr = CHIPDeviceManager::GetInstance();
 
@@ -69,8 +84,10 @@ extern "C" void app_main()
 
     InitServer();
 
-    while (true)
+    ESP_LOGI(TAG, "------------------------Starting App Task---------------------------");
+    err = GetAppTask().StartAppTask();
+    if (err != CHIP_NO_ERROR)
     {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        ESP_LOGE(TAG, "GetAppTask().Init() failed");
     }
 }

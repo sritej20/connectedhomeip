@@ -21,15 +21,6 @@
 #include <cstring>
 #include <type_traits>
 
-#include <gen/att-storage.h>
-#include <gen/attribute-id.h>
-#include <gen/attribute-type.h>
-#include <gen/callback.h>
-#include <gen/cluster-id.h>
-#include <gen/command-id.h>
-#include <gen/enums.h>
-#include <util/af.h>
-
 #include <lib/support/CodeUtils.h>
 #include <lib/support/SafeInt.h>
 #include <lib/support/Span.h>
@@ -37,12 +28,11 @@
 #include <lib/support/logging/CHIPLogging.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <platform/ConnectivityManager.h>
+#include <platform/internal/DeviceControlServer.h>
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ThreadStackManager.h>
 #endif // CHIP_DEVICE_CONFIG_ENABLE_THREAD
-
-#include <protocols/secure_channel/NetworkProvisioning.h>
 
 // Include DeviceNetworkProvisioningDelegateImpl for WiFi provisioning.
 // TODO: Enable wifi network should be done by ConnectivityManager. (Or other platform neutral interfaces)
@@ -50,6 +40,11 @@
 #define DEVICENETWORKPROVISIONING_HEADER <platform/CHIP_DEVICE_LAYER_TARGET/DeviceNetworkProvisioningDelegateImpl.h>
 #include DEVICENETWORKPROVISIONING_HEADER
 #endif
+
+// TODO: Configuration should move to build-time configuration
+#ifndef CHIP_CLUSTER_NETWORK_COMMISSIONING_MAX_NETWORKS
+#define CHIP_CLUSTER_NETWORK_COMMISSIONING_MAX_NETWORKS 4
+#endif // CHIP_CLUSTER_NETWORK_COMMISSIONING_MAX_NETWORKS
 
 using namespace chip;
 using namespace chip::app;
@@ -65,7 +60,7 @@ constexpr uint8_t kMaxNetworkIDLen       = 32;
 constexpr uint8_t kMaxThreadDatasetLen   = 254; // As defined in Thread spec.
 constexpr uint8_t kMaxWiFiSSIDLen        = 32;
 constexpr uint8_t kMaxWiFiCredentialsLen = 64;
-constexpr uint8_t kMaxNetworks           = 4;
+constexpr uint8_t kMaxNetworks           = CHIP_CLUSTER_NETWORK_COMMISSIONING_MAX_NETWORKS;
 
 enum class NetworkType : uint8_t
 {
@@ -97,8 +92,12 @@ struct NetworkInfo
     NetworkType mNetworkType;
     union NetworkData
     {
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
         Thread::OperationalDataset mThread;
+#endif
+#if defined(CHIP_DEVICE_LAYER_TARGET)
         WiFiNetworkInfo mWiFi;
+#endif
     } mData;
 };
 
@@ -107,8 +106,9 @@ namespace {
 NetworkInfo sNetworks[kMaxNetworks];
 } // namespace
 
-EmberAfNetworkCommissioningError OnAddThreadNetworkCommandCallbackInternal(app::Command *, EndpointId, ByteSpan operationalDataset,
-                                                                           uint64_t breadcrumb, uint32_t timeoutMs)
+EmberAfNetworkCommissioningError OnAddThreadNetworkCommandCallbackInternal(app::CommandHandler *, EndpointId,
+                                                                           ByteSpan operationalDataset, uint64_t breadcrumb,
+                                                                           uint32_t timeoutMs)
 {
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
     EmberAfNetworkCommissioningError err = EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_BOUNDS_EXCEEDED;
@@ -146,7 +146,7 @@ EmberAfNetworkCommissioningError OnAddThreadNetworkCommandCallbackInternal(app::
 exit:
     // TODO: We should encode response command here.
 
-    ChipLogDetail(Zcl, "AddThreadNetwork: %d", err);
+    ChipLogDetail(Zcl, "AddThreadNetwork: %" PRIu8, err);
     return err;
 #else
     // The target does not supports ThreadNetwork. We should not add AddThreadNetwork command in that case then the upper layer will
@@ -155,10 +155,11 @@ exit:
 #endif
 }
 
-EmberAfNetworkCommissioningError OnAddWiFiNetworkCommandCallbackInternal(app::Command *, EndpointId, ByteSpan ssid,
+EmberAfNetworkCommissioningError OnAddWiFiNetworkCommandCallbackInternal(app::CommandHandler *, EndpointId, ByteSpan ssid,
                                                                          ByteSpan credentials, uint64_t breadcrumb,
                                                                          uint32_t timeoutMs)
 {
+#if defined(CHIP_DEVICE_LAYER_TARGET)
     EmberAfNetworkCommissioningError err = EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_BOUNDS_EXCEEDED;
 
     for (size_t i = 0; i < kMaxNetworks; i++)
@@ -199,12 +200,17 @@ EmberAfNetworkCommissioningError OnAddWiFiNetworkCommandCallbackInternal(app::Co
 
     VerifyOrExit(err == EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_SUCCESS, );
 
-    ChipLogDetail(Zcl, "WiFi provisioning data: SSID: %s", ssid);
+    ChipLogDetail(Zcl, "WiFi provisioning data: SSID: %.*s", static_cast<int>(ssid.size()), ssid.data());
 exit:
     // TODO: We should encode response command here.
 
-    ChipLogDetail(Zcl, "AddWiFiNetwork: %d", err);
+    ChipLogDetail(Zcl, "AddWiFiNetwork: %" PRIu8, err);
     return err;
+#else
+    // The target does not supports WiFiNetwork.
+    // return "Command not found" error.
+    return EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_UNKNOWN_ERROR;
+#endif
 }
 
 namespace {
@@ -249,11 +255,19 @@ CHIP_ERROR DoEnableNetwork(NetworkInfo * network)
 }
 } // namespace
 
-EmberAfNetworkCommissioningError OnEnableNetworkCommandCallbackInternal(app::Command *, EndpointId, ByteSpan networkID,
+EmberAfNetworkCommissioningError OnEnableNetworkCommandCallbackInternal(app::CommandHandler *, EndpointId, ByteSpan networkID,
                                                                         uint64_t breadcrumb, uint32_t timeoutMs)
 {
     size_t networkSeq;
     EmberAfNetworkCommissioningError err = EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_NETWORK_ID_NOT_FOUND;
+    // TODO(cecille): This is very dangerous - need to check against real netif name, ensure no password.
+    constexpr char ethernetNetifMagicCode[] = "ETH0";
+    if (networkID.size() == sizeof(ethernetNetifMagicCode) &&
+        memcmp(networkID.data(), ethernetNetifMagicCode, networkID.size()) == 0)
+    {
+        ChipLogProgress(Zcl, "Wired network enabling requested. Assuming success.");
+        ExitNow(err = EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_SUCCESS);
+    }
 
     for (networkSeq = 0; networkSeq < kMaxNetworks; networkSeq++)
     {
@@ -270,6 +284,10 @@ EmberAfNetworkCommissioningError OnEnableNetworkCommandCallbackInternal(app::Com
     }
     // TODO: We should encode response command here.
 exit:
+    if (err == EMBER_ZCL_NETWORK_COMMISSIONING_ERROR_SUCCESS)
+    {
+        DeviceLayer::Internal::DeviceControlServer::DeviceControlSvr().EnableNetworkForOperational(networkID);
+    }
     return err;
 }
 

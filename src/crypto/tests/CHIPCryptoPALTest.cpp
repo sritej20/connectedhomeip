@@ -19,8 +19,10 @@
 
 #include "AES_CCM_128_test_vectors.h"
 #include "AES_CCM_256_test_vectors.h"
+#include "DerSigConversion_test_vectors.h"
 #include "ECDH_P256_test_vectors.h"
 #include "HKDF_SHA256_test_vectors.h"
+#include "HMAC_SHA256_test_vectors.h"
 #include "Hash_SHA256_test_vectors.h"
 #include "PBKDF2_SHA256_test_vectors.h"
 
@@ -49,8 +51,54 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <support/BytesToHex.h>
+
+#if CHIP_CRYPTO_OPENSSL
+#include "X509_PKCS7Extraction_test_vectors.h"
+#endif
+
+#include <credentials/CHIPCert.h>
+#include <credentials/tests/CHIPCert_test_vectors.h>
+
+#define HSM_ECC_KEYID 0x11223344
+
 using namespace chip;
 using namespace chip::Crypto;
+
+#ifdef ENABLE_HSM_EC_KEY
+class Test_P256Keypair : public P256KeypairHSM
+{
+public:
+    Test_P256Keypair() { SetKeyId(HSM_ECC_KEYID); }
+    Test_P256Keypair(uint32_t keyId) { SetKeyId(keyId); }
+};
+#else
+using Test_P256Keypair                  = P256Keypair;
+#endif
+
+#ifdef ENABLE_HSM_SPAKE
+using TestSpake2p_P256_SHA256_HKDF_HMAC = Spake2pHSM_P256_SHA256_HKDF_HMAC;
+#else
+using TestSpake2p_P256_SHA256_HKDF_HMAC = Spake2p_P256_SHA256_HKDF_HMAC;
+#endif
+
+#ifdef ENABLE_HSM_PBKDF2
+using TestPBKDF2_sha256 = PBKDF2_sha256HSM;
+#else
+using TestPBKDF2_sha256                 = PBKDF2_sha256;
+#endif
+
+#ifdef ENABLE_HSM_HKDF
+using TestHKDF_sha = HKDF_shaHSM;
+#else
+using TestHKDF_sha                      = HKDF_sha;
+#endif
+
+#ifdef ENABLE_HSM_HMAC
+using TestHMAC_sha = HMAC_shaHSM;
+#else
+using TestHMAC_sha                      = HMAC_sha;
+#endif
 
 static uint32_t gs_test_entropy_source_called = 0;
 static int test_entropy_source(void * data, uint8_t * output, size_t len, size_t * olen)
@@ -556,6 +604,44 @@ static void TestAES_CCM_128DecryptInvalidIVLen(nlTestSuite * inSuite, void * inC
     NL_TEST_ASSERT(inSuite, numOfTestsRan > 0);
 }
 
+static void TestAsn1Conversions(nlTestSuite * inSuite, void * inContext)
+{
+    static_assert(sizeof(kDerSigConvDerCase4) == (sizeof(kDerSigConvRawCase4) + chip::Crypto::kMax_ECDSA_X9Dot62_Asn1_Overhead),
+                  "kDerSigConvDerCase4 must have worst case overhead");
+
+    int numOfTestVectors = ArraySize(kDerSigConvTestVectors);
+    for (int vectorIndex = 0; vectorIndex < numOfTestVectors; vectorIndex++)
+    {
+        const der_sig_conv_vector * vector = &kDerSigConvTestVectors[vectorIndex];
+
+        chip::Platform::ScopedMemoryBuffer<uint8_t> out_raw_sig;
+        size_t out_raw_sig_allocated_size = vector->fe_length_bytes * 2;
+        out_raw_sig.Calloc(out_raw_sig_allocated_size);
+        NL_TEST_ASSERT(inSuite, out_raw_sig);
+
+        chip::Platform::ScopedMemoryBuffer<uint8_t> out_asn1_sig;
+        size_t out_asn1_sig_allocated_size = (vector->fe_length_bytes * 2) + kMax_ECDSA_X9Dot62_Asn1_Overhead;
+        out_asn1_sig.Calloc(out_asn1_sig_allocated_size);
+        NL_TEST_ASSERT(inSuite, out_asn1_sig);
+
+        // Test converstion from ASN.1 ER to raw
+        CHIP_ERROR status = EcdsaAsn1SignatureToRaw(vector->fe_length_bytes, vector->der_version, vector->der_version_length,
+                                                    out_raw_sig.Get(), out_raw_sig_allocated_size);
+        NL_TEST_ASSERT(inSuite, status == CHIP_NO_ERROR);
+        NL_TEST_ASSERT(inSuite, (memcmp(out_raw_sig.Get(), vector->raw_version, vector->raw_version_length) == 0));
+
+        // Test conversion from raw to ASN.1 DER
+        size_t der_size = 0;
+        status          = EcdsaRawSignatureToAsn1(vector->fe_length_bytes, vector->raw_version, vector->raw_version_length,
+                                         out_asn1_sig.Get(), out_asn1_sig_allocated_size, der_size);
+
+        NL_TEST_ASSERT(inSuite, status == CHIP_NO_ERROR);
+        NL_TEST_ASSERT(inSuite, der_size <= out_asn1_sig_allocated_size);
+        NL_TEST_ASSERT(inSuite, der_size == vector->der_version_length);
+        NL_TEST_ASSERT(inSuite, (memcmp(out_asn1_sig.Get(), vector->der_version, vector->der_version_length) == 0));
+    }
+}
+
 static void TestHash_SHA256(nlTestSuite * inSuite, void * inContext)
 {
     int numOfTestCases     = ArraySize(hash_sha256_test_vectors);
@@ -614,10 +700,31 @@ static void TestHash_SHA256_Stream(nlTestSuite * inSuite, void * inContext)
     NL_TEST_ASSERT(inSuite, numOfTestsExecuted == ArraySize(hash_sha256_test_vectors));
 }
 
+static void TestHMAC_SHA256(nlTestSuite * inSuite, void * inContext)
+{
+    int numOfTestCases     = ArraySize(hmac_sha256_test_vectors);
+    int numOfTestsExecuted = 0;
+    TestHMAC_sha mHMAC;
+
+    for (numOfTestsExecuted = 0; numOfTestsExecuted < numOfTestCases; numOfTestsExecuted++)
+    {
+        hmac_sha256_vector v = hmac_sha256_test_vectors[numOfTestsExecuted];
+        size_t out_length    = v.output_hash_length;
+        chip::Platform::ScopedMemoryBuffer<uint8_t> out_buffer;
+        out_buffer.Alloc(out_length);
+        NL_TEST_ASSERT(inSuite, out_buffer);
+        mHMAC.HMAC_SHA256(v.key, v.key_length, v.message, v.message_length, out_buffer.Get(), v.output_hash_length);
+        bool success = memcmp(v.output_hash, out_buffer.Get(), out_length) == 0;
+        NL_TEST_ASSERT(inSuite, success);
+    }
+    NL_TEST_ASSERT(inSuite, numOfTestsExecuted == numOfTestCases);
+}
+
 static void TestHKDF_SHA256(nlTestSuite * inSuite, void * inContext)
 {
     int numOfTestCases     = ArraySize(hkdf_sha256_test_vectors);
     int numOfTestsExecuted = 0;
+    TestHKDF_sha mHKDF;
 
     for (numOfTestsExecuted = 0; numOfTestsExecuted < numOfTestCases; numOfTestsExecuted++)
     {
@@ -626,8 +733,8 @@ static void TestHKDF_SHA256(nlTestSuite * inSuite, void * inContext)
         chip::Platform::ScopedMemoryBuffer<uint8_t> out_buffer;
         out_buffer.Alloc(out_length);
         NL_TEST_ASSERT(inSuite, out_buffer);
-        HKDF_SHA256(v.initial_key_material, v.initial_key_material_length, v.salt, v.salt_length, v.info, v.info_length,
-                    out_buffer.Get(), v.output_key_material_length);
+        mHKDF.HKDF_SHA256(v.initial_key_material, v.initial_key_material_length, v.salt, v.salt_length, v.info, v.info_length,
+                          out_buffer.Get(), v.output_key_material_length);
         bool success = memcmp(v.output_key_material, out_buffer.Get(), out_length) == 0;
         NL_TEST_ASSERT(inSuite, success);
     }
@@ -662,7 +769,8 @@ static void TestECDSA_Signing_SHA256_Msg(nlTestSuite * inSuite, void * inContext
     const char * msg  = "Hello World!";
     size_t msg_length = strlen(msg);
 
-    P256Keypair keypair;
+    Test_P256Keypair keypair;
+
     NL_TEST_ASSERT(inSuite, keypair.Initialize() == CHIP_NO_ERROR);
 
     P256ECDSASignature signature;
@@ -680,15 +788,30 @@ static void TestECDSA_Signing_SHA256_Hash(nlTestSuite * inSuite, void * inContex
                              0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F };
     size_t hash_length   = sizeof(hash);
 
-    P256Keypair keypair;
+    Test_P256Keypair keypair;
     NL_TEST_ASSERT(inSuite, keypair.Initialize() == CHIP_NO_ERROR);
 
-    P256ECDSASignature signature;
-    CHIP_ERROR signing_error = keypair.ECDSA_sign_hash(hash, hash_length, signature);
-    NL_TEST_ASSERT(inSuite, signing_error == CHIP_NO_ERROR);
+    // TODO: Need to make this large number (1k+) to catch some signature serialization corner cases
+    //       but this is too slow on QEMU/embedded, so we need to parametrize. Signing with ECDSA
+    //       is non-deterministic by design (since knowledge of the value `k` used allows recovery
+    //       of the private key).
+    constexpr int kNumSigningIterations = 3;
 
-    CHIP_ERROR validation_error = keypair.Pubkey().ECDSA_validate_hash_signature(hash, hash_length, signature);
-    NL_TEST_ASSERT(inSuite, validation_error == CHIP_NO_ERROR);
+    for (int i = 0; i < kNumSigningIterations; ++i)
+    {
+        P256ECDSASignature signature;
+        CHIP_ERROR signing_error = keypair.ECDSA_sign_hash(hash, hash_length, signature);
+        NL_TEST_ASSERT(inSuite, signing_error == CHIP_NO_ERROR);
+
+        CHIP_ERROR validation_error = keypair.Pubkey().ECDSA_validate_hash_signature(hash, hash_length, signature);
+        NL_TEST_ASSERT(inSuite, validation_error == CHIP_NO_ERROR);
+
+        if ((signing_error != CHIP_NO_ERROR) || (validation_error != CHIP_NO_ERROR))
+        {
+            ChipLogError(Crypto, "TestECDSA_Signing_SHA256_Hash failed after %d/%d iterations", i + 1, kNumSigningIterations);
+            break;
+        }
+    }
 }
 
 static void TestECDSA_ValidationFailsDifferentMessage(nlTestSuite * inSuite, void * inContext)
@@ -849,10 +972,14 @@ static void TestECDSA_ValidationHashInvalidParam(nlTestSuite * inSuite, void * i
 
 static void TestECDH_EstablishSecret(nlTestSuite * inSuite, void * inContext)
 {
-    P256Keypair keypair1;
+    Test_P256Keypair keypair1;
     NL_TEST_ASSERT(inSuite, keypair1.Initialize() == CHIP_NO_ERROR);
 
-    P256Keypair keypair2;
+#ifdef ENABLE_HSM_EC_KEY
+    Test_P256Keypair keypair2(HSM_ECC_KEYID + 1);
+#else
+    Test_P256Keypair keypair2;
+#endif
     NL_TEST_ASSERT(inSuite, keypair2.Initialize() == CHIP_NO_ERROR);
 
     P256ECDHDerivedSecret out_secret1;
@@ -909,6 +1036,7 @@ static void TestPBKDF2_SHA256_TestVectors(nlTestSuite * inSuite, void * inContex
 {
     int numOfTestVectors = ArraySize(pbkdf2_sha256_test_vectors);
     int numOfTestsRan    = 0;
+    TestPBKDF2_sha256 pbkdf1;
     for (int vectorIndex = 0; vectorIndex < numOfTestVectors; vectorIndex++)
     {
         const pbkdf2_test_vector * vector = pbkdf2_sha256_test_vectors[vectorIndex];
@@ -919,8 +1047,8 @@ static void TestPBKDF2_SHA256_TestVectors(nlTestSuite * inSuite, void * inContex
             out_key.Alloc(vector->key_len);
             NL_TEST_ASSERT(inSuite, out_key);
 
-            CHIP_ERROR err = pbkdf2_sha256(vector->password, vector->plen, vector->salt, vector->slen, vector->iter,
-                                           vector->key_len, out_key.Get());
+            CHIP_ERROR err = pbkdf1.pbkdf2_sha256(vector->password, vector->plen, vector->salt, vector->slen, vector->iter,
+                                                  vector->key_len, out_key.Get());
             NL_TEST_ASSERT(inSuite, err == vector->result);
 
             if (vector->result == CHIP_NO_ERROR)
@@ -948,24 +1076,44 @@ static void TestP256_Keygen(nlTestSuite * inSuite, void * inContext)
 
 static void TestCSR_Gen(nlTestSuite * inSuite, void * inContext)
 {
-    uint8_t csr[kMAX_CSR_Length];
+    static uint8_t csr[kMAX_CSR_Length];
     size_t length = sizeof(csr);
 
-    P256Keypair keypair;
+    static Test_P256Keypair keypair;
     NL_TEST_ASSERT(inSuite, keypair.Initialize() == CHIP_NO_ERROR);
     NL_TEST_ASSERT(inSuite, keypair.NewCertificateSigningRequest(csr, length) == CHIP_NO_ERROR);
     NL_TEST_ASSERT(inSuite, length > 0);
+
+    static P256PublicKey pubkey;
+    CHIP_ERROR err = VerifyCertificateSigningRequest(csr, length, pubkey);
+    if (err != CHIP_ERROR_UNSUPPORTED_CHIP_FEATURE)
+    {
+        NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
+        NL_TEST_ASSERT(inSuite, pubkey.Length() == kP256_PublicKey_Length);
+        NL_TEST_ASSERT(inSuite, memcmp(pubkey, keypair.Pubkey(), pubkey.Length()) == 0);
+
+        // Let's corrupt the CSR buffer and make sure it fails to verify
+        csr[length - 2] = (uint8_t)(csr[length - 2] + 1);
+        csr[length - 1] = (uint8_t)(csr[length - 1] + 1);
+
+        NL_TEST_ASSERT(inSuite, VerifyCertificateSigningRequest(csr, length, pubkey) != CHIP_NO_ERROR);
+    }
+    else
+    {
+        ChipLogError(Crypto, "The current platform does not support CSR parsing.");
+    }
 }
 
 static void TestKeypair_Serialize(nlTestSuite * inSuite, void * inContext)
 {
-    P256Keypair keypair;
+    Test_P256Keypair keypair;
+
     NL_TEST_ASSERT(inSuite, keypair.Initialize() == CHIP_NO_ERROR);
 
     P256SerializedKeypair serialized;
     NL_TEST_ASSERT(inSuite, keypair.Serialize(serialized) == CHIP_NO_ERROR);
 
-    P256Keypair keypair_dup;
+    Test_P256Keypair keypair_dup;
     NL_TEST_ASSERT(inSuite, keypair_dup.Deserialize(serialized) == CHIP_NO_ERROR);
 
     const char * msg         = "Test Message for Keygen";
@@ -989,11 +1137,9 @@ static void TestSPAKE2P_spake2p_FEMul(nlTestSuite * inSuite, void * inContext)
     for (int vectorIndex = 0; vectorIndex < numOfTestVectors; vectorIndex++)
     {
         const struct spake2p_fe_mul_tv * vector = fe_mul_tvs[vectorIndex];
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1026,11 +1172,8 @@ static void TestSPAKE2P_spake2p_FELoadWrite(nlTestSuite * inSuite, void * inCont
     {
         const struct spake2p_fe_rw_tv * vector = fe_rw_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1057,11 +1200,8 @@ static void TestSPAKE2P_spake2p_Mac(nlTestSuite * inSuite, void * inContext)
     {
         const struct spake2p_hmac_tv * vector = hmac_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1091,11 +1231,8 @@ static void TestSPAKE2P_spake2p_PointMul(nlTestSuite * inSuite, void * inContext
         out_len                                    = sizeof(output);
         const struct spake2p_point_mul_tv * vector = point_mul_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1131,11 +1268,8 @@ static void TestSPAKE2P_spake2p_PointMulAdd(nlTestSuite * inSuite, void * inCont
         out_len                                       = sizeof(output);
         const struct spake2p_point_muladd_tv * vector = point_muladd_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1177,11 +1311,8 @@ static void TestSPAKE2P_spake2p_PointLoadWrite(nlTestSuite * inSuite, void * inC
         out_len                                   = sizeof(output);
         const struct spake2p_point_rw_tv * vector = point_rw_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1207,11 +1338,8 @@ static void TestSPAKE2P_spake2p_PointIsValid(nlTestSuite * inSuite, void * inCon
     {
         const struct spake2p_point_valid_tv * vector = point_valid_tvs[vectorIndex];
 
-#if CHIP_CRYPTO_HSM
-        Spake2pHSM_P256_SHA256_HKDF_HMAC spake2p;
-#else
-        Spake2p_P256_SHA256_HKDF_HMAC spake2p;
-#endif
+        TestSpake2p_P256_SHA256_HKDF_HMAC spake2p;
+
         CHIP_ERROR err = spake2p.Init(nullptr, 0);
         NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
 
@@ -1231,7 +1359,7 @@ static void TestSPAKE2P_spake2p_PointIsValid(nlTestSuite * inSuite, void * inCon
 // We need to "generate" specific field elements
 // to do so we need to override the specific method
 class Test_Spake2p_P256_SHA256_HKDF_HMAC :
-#if CHIP_CRYPTO_HSM
+#ifdef ENABLE_HSM_SPAKE
     public Spake2pHSM_P256_SHA256_HKDF_HMAC
 #else
     public Spake2p_P256_SHA256_HKDF_HMAC
@@ -1389,6 +1517,54 @@ static void TestSPAKE2P_RFC(nlTestSuite * inSuite, void * inContext)
     NL_TEST_ASSERT(inSuite, numOfTestsRan == numOfTestVectors);
 }
 
+#if CHIP_CRYPTO_OPENSSL
+static void TestX509_PKCS7Extraction(nlTestSuite * inSuite, void * inContext)
+{
+    CHIP_ERROR err = CHIP_NO_ERROR;
+    int status     = 0;
+    X509DerCertificate x509list[3];
+    uint32_t max_certs = sizeof(x509list) / sizeof(X509DerCertificate);
+
+    err = LoadCertsFromPKCS7(pem_pkcs7_blob, x509list, &max_certs);
+    NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
+
+    status = memcmp(certificate_blob_leaf, x509list[0], x509list[0].Length());
+    NL_TEST_ASSERT(inSuite, status == 0);
+
+    status = memcmp(certificate_blob_intermediate, x509list[1], x509list[1].Length());
+    NL_TEST_ASSERT(inSuite, status == 0);
+
+    status = memcmp(certificate_blob_root, x509list[2], x509list[2].Length());
+    NL_TEST_ASSERT(inSuite, status == 0);
+}
+
+static void TestPubkey_x509Extraction(nlTestSuite * inSuite, void * inContext)
+{
+    using namespace TestCerts;
+
+    CHIP_ERROR err = CHIP_NO_ERROR;
+    P256PublicKey publicKey;
+
+    ByteSpan cert;
+    const uint8_t * certPubkey;
+    uint32_t certPubkeyLen;
+
+    for (size_t i = 0; i < gNumTestCerts; i++)
+    {
+        uint8_t certType = TestCerts::gTestCerts[i];
+
+        err = GetTestCert(certType, TestCertLoadFlags::kDERForm, cert);
+        NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
+        err = GetTestCertPubkey(certType, certPubkey, certPubkeyLen);
+        NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
+
+        err = ExtractPubkeyFromX509Cert(cert, publicKey);
+        NL_TEST_ASSERT(inSuite, err == CHIP_NO_ERROR);
+        NL_TEST_ASSERT(inSuite, memcmp(publicKey, certPubkey, certPubkeyLen) == 0);
+    }
+}
+#endif // CHIP_CRYPTO_OPENSSL
+
 /**
  *   Test Suite. It lists all the test functions.
  */
@@ -1414,6 +1590,7 @@ static const nlTest sTests[] = {
     NL_TEST_DEF("Test decrypting AES-CCM-256 invalid key", TestAES_CCM_256DecryptInvalidKey),
     NL_TEST_DEF("Test decrypting AES-CCM-256 invalid IV", TestAES_CCM_256DecryptInvalidIVLen),
     NL_TEST_DEF("Test decrypting AES-CCM-256 invalid vectors", TestAES_CCM_256DecryptInvalidTestVectors),
+    NL_TEST_DEF("Test ASN.1 signature conversion routines", TestAsn1Conversions),
     NL_TEST_DEF("Test ECDSA signing and validation message using SHA256", TestECDSA_Signing_SHA256_Msg),
     NL_TEST_DEF("Test ECDSA signing and validation SHA256 Hash", TestECDSA_Signing_SHA256_Hash),
     NL_TEST_DEF("Test ECDSA signature validation fail - Different msg", TestECDSA_ValidationFailsDifferentMessage),
@@ -1427,6 +1604,7 @@ static const nlTest sTests[] = {
     NL_TEST_DEF("Test Hash SHA 256", TestHash_SHA256),
     NL_TEST_DEF("Test Hash SHA 256 Stream", TestHash_SHA256_Stream),
     NL_TEST_DEF("Test HKDF SHA 256", TestHKDF_SHA256),
+    NL_TEST_DEF("Test HMAC SHA 256", TestHMAC_SHA256),
     NL_TEST_DEF("Test DRBG invalid inputs", TestDRBG_InvalidInputs),
     NL_TEST_DEF("Test DRBG output", TestDRBG_Output),
     NL_TEST_DEF("Test ECDH derive shared secret", TestECDH_EstablishSecret),
@@ -1443,6 +1621,10 @@ static const nlTest sTests[] = {
     NL_TEST_DEF("Test Spake2p_spake2p PointLoad/PointWrite", TestSPAKE2P_spake2p_PointLoadWrite),
     NL_TEST_DEF("Test Spake2p_spake2p PointIsValid", TestSPAKE2P_spake2p_PointIsValid),
     NL_TEST_DEF("Test Spake2+ against RFC test vectors", TestSPAKE2P_RFC),
+#if CHIP_CRYPTO_OPENSSL
+    NL_TEST_DEF("Test x509 Certificate Extraction from PKCS7", TestX509_PKCS7Extraction),
+    NL_TEST_DEF("Test Pubkey Extraction from x509 Certificate", TestPubkey_x509Extraction),
+#endif // CHIP_CRYPTO_OPENSSL
     NL_TEST_SENTINEL()
 };
 

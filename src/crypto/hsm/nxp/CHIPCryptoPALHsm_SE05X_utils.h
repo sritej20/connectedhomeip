@@ -15,8 +15,7 @@
  *    limitations under the License.
  */
 
-#ifndef _CHIP_CRYPTO_PAL_HSM_SE05X_UTILS_
-#define _CHIP_CRYPTO_PAL_HSM_SE05X_UTILS_
+#pragma once
 
 #include <string.h>
 
@@ -38,6 +37,16 @@
 #include <se05x_APDU.h>
 
 extern ex_sss_boot_ctx_t gex_sss_chip_ctx;
+
+/* SE predefined keyid values */
+enum keyid_values
+{
+    kKeyId_NotInitialized           = 0,
+    kKeyId_pbkdf2_sha256_hmac_keyid = 0xBCBCBCBC,
+    kKeyId_hkdf_sha256_hmac_keyid,
+    kKeyId_hmac_sha256_keyid,
+    kKeyId_sha256_ecc_pub_keyid,
+};
 
 // Enable the below macro to make spake HSM imlementation reentrant.
 #define ENABLE_REENTRANCY 0
@@ -64,10 +73,10 @@ extern "C" {
 void se05x_sessionOpen(void);
 
 /* Delete key in se05x */
-void se05x_delete_key(int keyid);
+void se05x_delete_key(uint32_t keyid);
 
 /* Set key in se05x */
-CHIP_ERROR se05x_set_key(int keyid, const uint8_t * key, size_t keylen, sss_key_part_t keyPart, sss_cipher_type_t cipherType);
+CHIP_ERROR se05x_set_key(uint32_t keyid, const uint8_t * key, size_t keylen, sss_key_part_t keyPart, sss_cipher_type_t cipherType);
 
 #if ENABLE_REENTRANCY
 
@@ -88,5 +97,3 @@ void setObjID(SE05x_CryptoObjectID_t objId, uint8_t status);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /*_CHIP_CRYPTO_PAL_HSM_SE05X_UTILS_*/

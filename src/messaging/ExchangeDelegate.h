@@ -42,27 +42,48 @@ class ExchangeContext;
  *   is interested in receiving these callbacks, they can specialize this class and handle
  *   each trigger in their implementation of this class.
  */
-class DLL_EXPORT ExchangeDelegateBase
+class DLL_EXPORT ExchangeDelegate
 {
 public:
-    virtual ~ExchangeDelegateBase() {}
+    virtual ~ExchangeDelegate() {}
 
     /**
      * @brief
-     *   This function is the protocol callback for handling a received CHIP message.
+     *   This function is the protocol callback for handling a received CHIP
+     *   message.
+     *
+     *   After calling this method an exchange will close itself unless one of
+     *   two things happens:
+     *
+     *   1) A call to SendMessage on the exchange with the kExpectResponse flag
+     *      set.
+     *   2) A call to WillSendMessage on the exchange.
+     *
+     *   Consumers that don't do one of those things MUST NOT retain a pointer
+     *   to the exchange.
      *
      *  @param[in]    ec            A pointer to the ExchangeContext object.
      *  @param[in]    packetHeader  A reference to the PacketHeader object.
      *  @param[in]    payloadHeader A reference to the PayloadHeader object.
      *  @param[in]    payload       A handle to the PacketBuffer object holding the message payload.
      */
-    virtual void OnMessageReceived(ExchangeContext * ec, const PacketHeader & packetHeader, const PayloadHeader & payloadHeader,
-                                   System::PacketBufferHandle payload) = 0;
+    virtual CHIP_ERROR OnMessageReceived(ExchangeContext * ec, const PacketHeader & packetHeader,
+                                         const PayloadHeader & payloadHeader, System::PacketBufferHandle && payload) = 0;
 
     /**
      * @brief
      *   This function is the protocol callback to invoke when the timeout for the receipt
      *   of a response message has expired.
+     *
+     *   After calling this method an exchange will close itself unless one of
+     *   two things happens:
+     *
+     *   1) A call to SendMessage on the exchange with the kExpectResponse flag
+     *      set.
+     *   2) A call to WillSendMessage on the exchange.
+     *
+     *   Consumers that don't do one of those things MUST NOT retain a pointer
+     *   to the exchange.
      *
      *  @param[in]    ec            A pointer to the ExchangeContext object.
      */
@@ -77,22 +98,10 @@ public:
      */
     virtual void OnExchangeClosing(ExchangeContext * ec) {}
 
-    virtual ExchangeMessageDispatch * GetMessageDispatch(ReliableMessageMgr * rmMgr, SecureSessionMgr * sessionMgr) = 0;
-};
-
-class DLL_EXPORT ExchangeDelegate : public ExchangeDelegateBase
-{
-public:
-    virtual ~ExchangeDelegate() {}
-
-    virtual ExchangeMessageDispatch * GetMessageDispatch(ReliableMessageMgr * rmMgr, SecureSessionMgr * sessionMgr)
+    virtual ExchangeMessageDispatch * GetMessageDispatch(ReliableMessageMgr * reliableMessageMgr, SecureSessionMgr * sessionMgr)
     {
-        mMessageDispatch.Init(rmMgr, sessionMgr);
-        return &mMessageDispatch;
+        return nullptr;
     }
-
-private:
-    ApplicationExchangeDispatch mMessageDispatch;
 };
 
 } // namespace Messaging

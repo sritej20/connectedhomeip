@@ -40,11 +40,15 @@ public:
     {
         ReturnErrorCodeIf(transportMgr == nullptr, CHIP_ERROR_INVALID_ARGUMENT);
         mTransportMgr = transportMgr;
-        return CHIP_NO_ERROR;
+        return ExchangeMessageDispatch::Init();
     }
 
+    CHIP_ERROR PrepareMessage(SecureSessionHandle session, PayloadHeader & payloadHeader, System::PacketBufferHandle && message,
+                              EncryptedPacketBufferHandle & out) override;
+    CHIP_ERROR SendPreparedMessage(SecureSessionHandle session, const EncryptedPacketBufferHandle & preparedMessage) const override;
+
     CHIP_ERROR OnMessageReceived(const PayloadHeader & payloadHeader, uint32_t messageId,
-                                 const Transport::PeerAddress & peerAddress,
+                                 const Transport::PeerAddress & peerAddress, Messaging::MessageFlags msgFlags,
                                  Messaging::ReliableMessageContext * reliableMessageContext) override;
 
     const Transport::PeerAddress & GetPeerAddress() const { return mPeerAddress; }
@@ -52,16 +56,12 @@ public:
     void SetPeerAddress(const Transport::PeerAddress & address) { mPeerAddress = address; }
 
 protected:
-    CHIP_ERROR SendMessageImpl(SecureSessionHandle session, PayloadHeader & payloadHeader, System::PacketBufferHandle && message,
-                               EncryptedPacketBufferHandle * retainedMessage) override;
-
     bool MessagePermitted(uint16_t protocol, uint8_t type) override;
 
-    bool IsTransportReliable() override
+    bool IsReliableTransmissionAllowed() const override
     {
-        // If we are not using BLE as the transport, the underlying transport is UDP based.
-        // (return true only if BLE is being used as the transport)
-        return (mTransportMgr == nullptr);
+        // If the underlying transport is UDP.
+        return (mPeerAddress.GetTransportType() == Transport::Type::kUdp);
     }
 
 private:

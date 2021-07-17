@@ -16,19 +16,17 @@ import("//build_overrides/build.gni")
 import("//build_overrides/chip.gni")
 
 import("${chip_root}/build/chip/tools.gni")
-import("${chip_root}/src/app/chip_data_model.gni")
 
 assert(chip_build_tools)
 
-chip_data_model("data_model") {
-  cluster_sources = [
-    "media-playback-client",
-    "thermostat-client",
-  ]
+declare_args() {
+  # Use a separate eventloop for CHIP tasks
+  config_use_separate_eventloop = true
 
-  zap_pregenerated_dir = "gen"
-
-  use_default_client_callbacks = true
+  # Generate a new node id on every pairing.  This significantly slows
+  # down running a lot of pairings (because of all the disk traffic for
+  # saving the config file), so we disable it in some configurations.
+  config_pair_with_random_id = true
 }
 
 executable("chip-tool") {
@@ -37,17 +35,23 @@ executable("chip-tool") {
     "commands/common/Command.cpp",
     "commands/common/Commands.cpp",
     "commands/discover/DiscoverCommand.cpp",
+    "commands/discover/DiscoverCommissionersCommand.cpp",
     "commands/pairing/PairingCommand.cpp",
     "commands/payload/AdditionalDataParseCommand.cpp",
     "commands/payload/SetupPayloadParseCommand.cpp",
     "commands/reporting/ReportingCommand.cpp",
+    "commands/tests/TestCommand.cpp",
     "config/PersistentStorage.cpp",
     "main.cpp",
   ]
 
+  defines = [
+    "CONFIG_USE_SEPARATE_EVENTLOOP=${config_use_separate_eventloop}",
+    "CONFIG_PAIR_WITH_RANDOM_ID=${config_pair_with_random_id}",
+  ]
+
   deps = [
-    ":data_model",
-    "${chip_root}/src/app/server",
+    "${chip_root}/src/controller/data_model",
     "${chip_root}/src/lib",
     "${chip_root}/src/platform",
     "${chip_root}/third_party/inipp",

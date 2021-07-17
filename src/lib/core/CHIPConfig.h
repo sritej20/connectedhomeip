@@ -53,7 +53,7 @@
  *
  * An application or module that incorporates chip can define a project configuration
  * file to override standard chip configuration with application-specific values.
- * The chipProjectConfig.h file is typically located outside the Openchip source tree,
+ * The chipProjectConfig.h file is typically located outside the CHIP source tree,
  * alongside the source code for the application.
  */
 #ifdef CHIP_PROJECT_CONFIG_INCLUDE
@@ -64,8 +64,8 @@
  *
  * A platform configuration file contains overrides to standard chip configuration
  * that are specific to the platform or OS on which chip is running.  It is typically
- * provided as apart of an adaptation layer that adapts Openchip to the target
- * environment.  This adaptation layer may be included in the Openchip source tree
+ * provided as apart of an adaptation layer that adapts CHIP to the target
+ * environment.  This adaptation layer may be included in the CHIP source tree
  * itself or implemented externally.
  */
 #ifdef CHIP_PLATFORM_CONFIG_INCLUDE
@@ -73,63 +73,6 @@
 #endif
 
 // Profile-specific Configuration Headers
-/**
- *  @def CHIP_CONFIG_ERROR_TYPE
- *
- *  @brief
- *    This defines the data type used to represent errors for chip.
- *
- */
-#ifndef CHIP_CONFIG_ERROR_TYPE
-#include <stdint.h>
-
-#define CHIP_CONFIG_ERROR_TYPE int32_t
-#endif // CHIP_CONFIG_ERROR_TYPE
-
-/**
- *  @def CHIP_CONFIG_NO_ERROR
- *
- *  @brief
- *    This defines the chip error code for no error or success.
- *
- */
-#ifndef CHIP_CONFIG_NO_ERROR
-#define CHIP_CONFIG_NO_ERROR 0
-#endif // CHIP_CONFIG_NO_ERROR
-
-/**
- *  @def CHIP_CONFIG_ERROR_MIN
- *
- *  @brief
- *    This defines the base or minimum chip error number range.
- *
- */
-#ifndef CHIP_CONFIG_ERROR_MIN
-#define CHIP_CONFIG_ERROR_MIN 4000
-#endif // CHIP_CONFIG_ERROR_MIN
-
-/**
- *  @def CHIP_CONFIG_ERROR_MAX
- *
- *  @brief
- *    This defines the top or maximum chip error number range.
- *
- */
-#ifndef CHIP_CONFIG_ERROR_MAX
-#define CHIP_CONFIG_ERROR_MAX 4999
-#endif // CHIP_CONFIG_ERROR_MAX
-
-/**
- *  @def _CHIP_CONFIG_ERROR
- *
- *  @brief
- *    This defines a mapping function for chip errors that allows
- *    mapping such errors into a platform- or system-specific manner.
- *
- */
-#ifndef _CHIP_CONFIG_ERROR
-#define _CHIP_CONFIG_ERROR(e) (CHIP_ERROR_MIN + (e))
-#endif // _CHIP_CONFIG_ERROR
 
 /**
  *  @def CHIP_CONFIG_USE_OPENSSL_ECC
@@ -1293,6 +1236,28 @@
 #endif // CHIP_CONFIG_NODE_ADDRESS_RESOLVE_TIMEOUT_MSECS
 
 /**
+ *  @def CHIP_CONFIG_MCSP_RECEIVE_TABLE_SIZE
+ *
+ *  @brief
+ *    Size of the receive table for message counter synchronization protocol
+ *
+ */
+#ifndef CHIP_CONFIG_MCSP_RECEIVE_TABLE_SIZE
+#define CHIP_CONFIG_MCSP_RECEIVE_TABLE_SIZE (CHIP_CONFIG_MAX_EXCHANGE_CONTEXTS - 2)
+#endif // CHIP_CONFIG_MCSP_RECEIVE_TABLE_SIZE
+
+/**
+ *  @def CHIP_CONFIG_MESSAGE_COUNTER_WINDOW_SIZE
+ *
+ *  @brief
+ *    Max number of messages behind message window can be accepted.
+ *
+ */
+#ifndef CHIP_CONFIG_MESSAGE_COUNTER_WINDOW_SIZE
+#define CHIP_CONFIG_MESSAGE_COUNTER_WINDOW_SIZE 32
+#endif // CHIP_CONFIG_MESSAGE_COUNTER_WINDOW_SIZE
+
+/**
  *  @def CHIP_CONFIG_CONNECT_IP_ADDRS
  *
  *  @brief
@@ -1372,7 +1337,7 @@
  *
  */
 #ifndef CHIP_PORT
-#define CHIP_PORT 11097
+#define CHIP_PORT 5540
 #endif // CHIP_PORT
 
 /**
@@ -1594,6 +1559,10 @@
 #ifndef CHIP_CONFIG_SUPPORT_CASE_CONFIG1
 #define CHIP_CONFIG_SUPPORT_CASE_CONFIG1 1
 #endif // CHIP_CONFIG_SUPPORT_CASE_CONFIG1
+
+#ifndef CHIP_CONFIG_PERSISTED_STORAGE_KEY_GLOBAL_MESSAGE_COUNTER
+#define CHIP_CONFIG_PERSISTED_STORAGE_KEY_GLOBAL_MESSAGE_COUNTER "GlobalMCTR"
+#endif // CHIP_CONFIG_PERSISTED_STORAGE_KEY_GLOBAL_MESSAGE_COUNTER
 
 /**
  *  @def CHIP_CONFIG_DEFAULT_CASE_CURVE_ID
@@ -1956,6 +1925,28 @@
 #ifndef CHIP_CONFIG_TEST
 #define CHIP_CONFIG_TEST 0
 #endif // CHIP_CONFIG_TEST
+
+/**
+ *  @def CHIP_CONFIG_ERROR_CLASS
+ *
+ *  If 0, #CHIP_ERROR is an integer type, ::chip::ChipError::StorageType.
+ *  If 1, #CHIP_ERROR is a class type, ::chip::ChipError.
+ */
+#ifndef CHIP_CONFIG_ERROR_CLASS
+#define CHIP_CONFIG_ERROR_CLASS 0
+#endif // CHIP_CONFIG_ERROR_CLASS
+
+/**
+ *  @def CHIP_CONFIG_ERROR_FORMAT_AS_STRING
+ *
+ *  If 0, then ChipError::FormatError() returns an integer (ChipError::BaseType).
+ *  If 1, then ChipError::FormatError() returns a const char *, from chip::ErrorStr().
+ *  In either case, the macro CHIP_ERROR_FORMAT expands to a suitable printf format.
+ */
+
+#ifndef CHIP_CONFIG_ERROR_FORMAT_AS_STRING
+#define CHIP_CONFIG_ERROR_FORMAT_AS_STRING 0
+#endif // CHIP_CONFIG_ERROR_FORMAT_AS_STRING
 
 /**
  *  @def CHIP_CONFIG_SHORT_ERROR_STR
@@ -2370,4 +2361,26 @@
 
 #ifdef CHIP_NON_PRODUCTION_MARKER
 extern const char CHIP_NON_PRODUCTION_MARKER[];
+#endif
+
+/**
+ * @def CHIP_COMMISSIONING_HINT_TABLE
+ *
+ * @brief Defines the set of "pairing hint" values that can be set in
+ * the PH key in commissionable node discovery response.
+ */
+#ifndef CHIP_COMMISSIONING_HINT_TABLE
+#define CHIP_COMMISSIONING_HINT_TABLE
+#define CHIP_COMMISSIONING_HINT_INDEX_POWER_CYCLE 0
+#define CHIP_COMMISSIONING_HINT_INDEX_MANUFACTURER_URL 1
+#define CHIP_COMMISSIONING_HINT_INDEX_SEE_ADMINISTRATOR_UX 2
+#define CHIP_COMMISSIONING_HINT_INDEX_SEE_SETTINGS_MENU 3
+#define CHIP_COMMISSIONING_HINT_INDEX_CUSTOM_INSTRUCTION 4
+#define CHIP_COMMISSIONING_HINT_INDEX_SEE_MANUAL 5
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET 6
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET_WITH_POWER 7
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET_SECONDS 8
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET_UNTIL_BLINK 9
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET_SECONDS_WITH_POWER 10
+#define CHIP_COMMISSIONING_HINT_INDEX_PRESS_RESET_UNTIL_BLINK_WITH_POWER 11
 #endif

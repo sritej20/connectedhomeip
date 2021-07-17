@@ -20,7 +20,7 @@
 #include "AppTask.h"
 #include "AppConfig.h"
 #include "AppEvent.h"
-#include "Server.h"
+#include <app/server/Server.h>
 
 #include "FreeRTOS.h"
 
@@ -28,9 +28,7 @@
 #include <support/CHIPMem.h>
 #include <support/CHIPPlatformMemory.h>
 
-#include "OnboardingCodesUtil.h"
-
-#include "DataModelHandler.h"
+#include <app/server/OnboardingCodesUtil.h>
 
 #include <ti/drivers/apps/Button.h>
 #include <ti/drivers/apps/LED.h>
@@ -79,7 +77,6 @@ int AppTask::StartAppTask()
 
 int AppTask::Init()
 {
-    int ret = CHIP_ERROR_MAX;
     LED_Params ledParams;
     Button_Params buttionParams;
     ConnectivityManager::ThreadPollingConfig pollingConfig;
@@ -89,7 +86,7 @@ int AppTask::Init()
     // Init Chip memory management before the stack
     chip::Platform::MemoryInit();
 
-    ret = PlatformMgr().InitChipStack();
+    CHIP_ERROR ret = PlatformMgr().InitChipStack();
     if (ret != CHIP_NO_ERROR)
     {
         PLAT_LOG("PlatformMgr().InitChipStack() failed");

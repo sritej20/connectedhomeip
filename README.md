@@ -4,10 +4,10 @@
 
 ![Examples - EFR32](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20EFR32/badge.svg)
 ![Examples - nRF Connect SDK](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20nRF%20Connect%20SDK/badge.svg)
-![Examples - QPG6100](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20QPG6100/badge.svg)
+![Examples - QPG](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20QPG/badge.svg)
 ![Examples - Linux Standalone](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20Linux%20Standalone/badge.svg)
 ![Examples - ESP32](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20ESP32/badge.svg)
-![Examples - K32W](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20K32W/badge.svg)
+![Examples - K32W with SE051](https://github.com/project-chip/connectedhomeip/workflows/Build%20example%20-%20K32W%20with%20SE051/badge.svg)
 
 ![Android](https://github.com/project-chip/connectedhomeip/workflows/Android/badge.svg)
 
@@ -36,7 +36,7 @@ The Zigbee Alliance officially opened the Project Connected Home over IP
 (Project CHIP) Working Group on January 17, 2020 and is in the process of
 drafting the specification.
 
-Visit [connectedhomeip.com](https://connectedhomeip.com) to learn more and read
+Visit [buildwithmatter.com](https://buildwithmatter.com) to learn more and read
 the latest news and updates about the project.
 
 # Project Overview

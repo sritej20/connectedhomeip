@@ -18,11 +18,11 @@
 
 #include <support/logging/CHIPLogging.h>
 
-#include "af.h"
-#include "gen/attribute-id.h"
-#include "gen/cluster-id.h"
-#include "gen/command-id.h"
+#include <app/common/gen/attribute-id.h>
+#include <app/common/gen/cluster-id.h>
+#include <app/common/gen/command-id.h>
 #include <app/util/af-types.h>
+#include <app/util/af.h>
 
 #include "AppTask.h"
 #include "LightingManager.h"
@@ -30,15 +30,15 @@
 using namespace chip;
 
 void emberAfPostAttributeChangeCallback(EndpointId endpoint, ClusterId clusterId, AttributeId attributeId, uint8_t mask,
-                                        uint16_t manufacturerCode, uint8_t type, uint8_t size, uint8_t * value)
+                                        uint16_t manufacturerCode, uint8_t type, uint16_t size, uint8_t * value)
 {
-    ChipLogProgress(Zcl, "Cluster callback: %d", clusterId);
+    ChipLogProgress(Zcl, "Cluster callback: %" PRIx32, clusterId);
 
     if (clusterId == ZCL_ON_OFF_CLUSTER_ID)
     {
         if (attributeId != ZCL_ON_OFF_ATTRIBUTE_ID)
         {
-            ChipLogProgress(Zcl, "Unknown attribute ID: %d", attributeId);
+            ChipLogProgress(Zcl, "Unknown attribute ID: %" PRIx32, attributeId);
             return;
         }
 
@@ -47,9 +47,9 @@ void emberAfPostAttributeChangeCallback(EndpointId endpoint, ClusterId clusterId
     }
     else if (clusterId == ZCL_LEVEL_CONTROL_CLUSTER_ID)
     {
-        if (attributeId != ZCL_MOVE_TO_LEVEL_COMMAND_ID)
+        if (attributeId != ZCL_CURRENT_LEVEL_ATTRIBUTE_ID)
         {
-            ChipLogProgress(Zcl, "Unknown attribute ID: %d", attributeId);
+            ChipLogProgress(Zcl, "Unknown attribute ID: %" PRIx32, attributeId);
             return;
         }
 
@@ -65,7 +65,7 @@ void emberAfPostAttributeChangeCallback(EndpointId endpoint, ClusterId clusterId
     }
     else
     {
-        ChipLogProgress(Zcl, "Unknown cluster ID: %d", clusterId);
+        ChipLogProgress(Zcl, "Unknown cluster ID: %" PRIx32, clusterId);
         return;
     }
 }

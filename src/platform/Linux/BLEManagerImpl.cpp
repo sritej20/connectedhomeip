@@ -54,7 +54,7 @@ const ChipBleUUID ChipUUID_CHIPoBLEChar_RX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0
 const ChipBleUUID ChipUUID_CHIPoBLEChar_TX = { { 0x18, 0xEE, 0x2E, 0xF5, 0x26, 0x3D, 0x45, 0x59, 0x95, 0x9F, 0x4F, 0x9C, 0x42, 0x9F,
                                                  0x9D, 0x12 } };
 
-void HandleConnectTimeout(chip::System::Layer *, void * apEndpoint, chip::System::Error)
+void HandleConnectTimeout(chip::System::Layer *, void * apEndpoint, CHIP_ERROR)
 {
     assert(apEndpoint != nullptr);
 
@@ -272,7 +272,7 @@ void BLEManagerImpl::HandlePlatformSpecificBLEEvent(const ChipDeviceEvent * apEv
 {
     CHIP_ERROR err         = CHIP_NO_ERROR;
     bool controlOpComplete = false;
-    ChipLogProgress(DeviceLayer, "HandlePlatformSpecificBLEEvent %d", apEvent->Type);
+    ChipLogDetail(DeviceLayer, "HandlePlatformSpecificBLEEvent %d", apEvent->Type);
     switch (apEvent->Type)
     {
     case DeviceEventType::kPlatformLinuxBLECentralConnected:
@@ -476,7 +476,7 @@ void BLEManagerImpl::HandleTXCharChanged(BLE_CONNECTION_OBJECT conId, const uint
     CHIP_ERROR err                 = CHIP_NO_ERROR;
     System::PacketBufferHandle buf = System::PacketBufferHandle::NewWithData(value, len);
 
-    ChipLogProgress(DeviceLayer, "Indication received, conn = %p", conId);
+    ChipLogDetail(DeviceLayer, "Indication received, conn = %p", conId);
 
     VerifyOrExit(!buf.IsNull(), err = CHIP_ERROR_NO_MEMORY);
 
@@ -734,9 +734,9 @@ void BLEManagerImpl::NewConnection(BleLayer * bleLayer, void * appState, const u
     PlatformMgr().ScheduleWork(InitiateScan, static_cast<intptr_t>(BleScanState::kScanForDiscriminator));
 }
 
-BLE_ERROR BLEManagerImpl::CancelConnection()
+CHIP_ERROR BLEManagerImpl::CancelConnection()
 {
-    return BLE_ERROR_NOT_IMPLEMENTED;
+    return CHIP_ERROR_NOT_IMPLEMENTED;
 }
 
 void BLEManagerImpl::NotifyBLEPeripheralRegisterAppComplete(bool aIsSuccess, void * apAppstate)

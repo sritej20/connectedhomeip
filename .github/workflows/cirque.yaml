@@ -15,12 +15,19 @@
 name: Cirque
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
+
+concurrency:
+    group: ${{ github.ref }}-${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.number) || (github.event_name == 'workflow_dispatch' && github.run_number) || github.sha }}
+    cancel-in-progress: true
 
 jobs:
     cirque:
         name: Cirque
-
+        timeout-minutes: 60
+        
         env:
             DOCKER_RUN_VERSION: 0.4.21
             GITHUB_CACHE_PATH: /tmp/cirque-cache/
@@ -58,7 +65,8 @@ jobs:
                   path: ${{ env.GITHUB_CACHE_PATH }}
                   key: ${{ runner.os }}-cirque-${{ steps.cirque-key.outputs.val }}
 
-            - name: Bootstrap
+            - name: Cirque Bootstrap
+              timeout-minutes: 15
               run: |
                   integrations/docker/images/chip-build-cirque/run.sh \
                     --env GITHUB_ACTION_RUN=1 \
@@ -73,6 +81,7 @@ jobs:
                   if_true: "${{ github.sha }}"
                   if_false: "pull-${{ github.event.pull_request.number }}"
             - name: Run Tests
+              timeout-minutes: 25
               run: |
                   integrations/docker/images/chip-build-cirque/run.sh \
                      --env LOG_DIR=/tmp/cirque_test_output \

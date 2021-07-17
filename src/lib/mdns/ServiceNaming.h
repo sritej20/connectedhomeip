@@ -19,6 +19,7 @@
 
 #include <core/CHIPError.h>
 #include <core/PeerId.h>
+#include <mdns/Resolver.h>
 #include <support/Span.h>
 
 #include <cstddef>
@@ -26,6 +27,22 @@
 
 namespace chip {
 namespace Mdns {
+constexpr size_t kMaxSubtypeDescSize        = 16; // max 16 char service name
+constexpr char kSubtypeServiceNamePart[]    = "_sub";
+constexpr char kCommissionableServiceName[] = "_matterc";
+constexpr char kOperationalServiceName[]    = "_matter";
+constexpr char kCommissionerServiceName[]   = "_matterd";
+constexpr char kOperationalProtocol[]       = "_tcp";
+constexpr char kCommissionProtocol[]        = "_udp";
+constexpr char kLocalDomain[]               = "local";
+
+// each includes space for a null terminator, which becomes a . when the names are appended.
+constexpr size_t kMaxCommisisonableServiceNameSize =
+    kMaxSubtypeDescSize + sizeof(kSubtypeServiceNamePart) + sizeof(kCommissionableServiceName);
+
+// each includes space for a null terminator, which becomes a . when the names are appended.
+constexpr size_t kMaxCommisisonerServiceNameSize =
+    kMaxSubtypeDescSize + sizeof(kSubtypeServiceNamePart) + sizeof(kCommissionerServiceName);
 
 /// builds the MDNS advertising name for a given fabric + nodeid pair
 CHIP_ERROR MakeInstanceName(char * buffer, size_t bufferLen, const PeerId & peerId);
@@ -36,6 +53,10 @@ CHIP_ERROR ExtractIdFromInstanceName(const char * name, PeerId * peerId);
 /// Generates the host name that a CHIP device is to use for a given unique
 /// identifier (MAC address or EUI64)
 CHIP_ERROR MakeHostName(char * buffer, size_t bufferLen, const chip::ByteSpan & macOrEui64);
+
+CHIP_ERROR MakeServiceSubtype(char * buffer, size_t bufferLen, DiscoveryFilter subtype);
+
+CHIP_ERROR MakeServiceTypeName(char * buffer, size_t bufferLen, DiscoveryFilter nameDesc, DiscoveryType type);
 
 } // namespace Mdns
 } // namespace chip

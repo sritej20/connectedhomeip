@@ -19,7 +19,6 @@ import("//build_overrides/pigweed.gni")
 import("$dir_pw_build/python.gni")
 
 import("${chip_root}/build/chip/tools.gni")
-import("${chip_root}/src/app/chip_data_model.gni")
 import("${chip_root}/src/platform/device.gni")
 import("${dir_pw_unit_test}/test.gni")
 
@@ -31,20 +30,13 @@ config("controller_wno_deprecate") {
   cflags = [ "-Wno-deprecated-declarations" ]
 }
 
-chip_data_model("python_data_model") {
-  cluster_sources = [ "media-playback-client" ]
-
-  zap_pregenerated_dir = "gen"
-
-  use_default_client_callbacks = true
-}
-
 shared_library("ChipDeviceCtrl") {
   output_name = "_ChipDeviceCtrl"
   output_dir = "${target_out_dir}/chip"
   include_dirs = [ "." ]
 
   sources = [
+    "ChipCommissionableNodeController-ScriptBinding.cpp",
     "ChipDeviceController-ScriptBinding.cpp",
     "ChipDeviceController-ScriptDeviceAddressUpdateDelegate.cpp",
     "ChipDeviceController-ScriptDeviceAddressUpdateDelegate.h",
@@ -61,6 +53,7 @@ shared_library("ChipDeviceCtrl") {
     "chip/internal/CommissionerImpl.cpp",
     "chip/logging/LoggingRedirect.cpp",
     "chip/native/StackInit.cpp",
+    "chip/setup_payload/Generator.cpp",
     "chip/setup_payload/Parser.cpp",
   ]
 
@@ -72,22 +65,24 @@ shared_library("ChipDeviceCtrl") {
         "chip/ble/darwin/AdapterListing.mm",
         "chip/ble/darwin/Scanning.mm",
       ]
+      cflags = [ "-fobjc-arc" ]
     } else {
       assert(false, "No BLE implementation available for the current OS.")
     }
   }
 
   public_deps = [
-    ":python_data_model",
     "${chip_root}/src/app",
-    "${chip_root}/src/controller",
+    "${chip_root}/src/app/server",
+    "${chip_root}/src/controller/data_model",
     "${chip_root}/src/lib",
     "${chip_root}/src/lib/core",
+    "${chip_root}/src/lib/mdns",
     "${chip_root}/src/lib/support",
     "${chip_root}/src/platform",
+    "${chip_root}/src/setup_payload",
     "${chip_root}/src/transport",
   ]
-  allow_circular_includes_from = [ "${chip_root}/src/controller" ]
   configs += [ ":controller_wno_deprecate" ]
 }
 
@@ -103,6 +98,7 @@ pw_python_action("python") {
         "chip/ChipBleBase.py",
         "chip/ChipBleUtility.py",
         "chip/ChipBluezMgr.py",
+        "chip/ChipCommissionableNodeCtrl.py",
         "chip/ChipCoreBluetoothMgr.py",
         "chip/ChipDeviceCtrl.py",
         "chip/ChipStack.py",

@@ -32,6 +32,7 @@
 #include <messaging/ExchangeMgr.h>
 #include <messaging/Flags.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <protocols/secure_channel/MessageCounterManager.h>
 #include <protocols/secure_channel/PASESession.h>
 #include <support/ErrorStr.h>
 #include <support/UnitTestRegistration.h>
@@ -47,9 +48,39 @@ static System::Layer gSystemLayer;
 static SecureSessionMgr gSessionManager;
 static Messaging::ExchangeManager gExchangeManager;
 static TransportMgr<Transport::UDP> gTransportManager;
+static secure_channel::MessageCounterManager gMessageCounterManager;
 static const Transport::AdminId gAdminId = 0;
+constexpr ClusterId kTestClusterId       = 6;
+constexpr EndpointId kTestEndpointId     = 1;
+constexpr chip::FieldId kTestFieldId1    = 1;
+constexpr chip::FieldId kTestFieldId2    = 2;
+constexpr uint8_t kTestFieldValue1       = 1;
+constexpr uint8_t kTestFieldValue2       = 2;
 
 namespace app {
+CHIP_ERROR ReadSingleClusterData(AttributePathParams & aAttributePathParams, TLV::TLVWriter * apWriter, bool * apDataExists)
+{
+    CHIP_ERROR err = CHIP_NO_ERROR;
+    VerifyOrExit(aAttributePathParams.mClusterId == kTestClusterId && aAttributePathParams.mEndpointId == kTestEndpointId,
+                 err = CHIP_ERROR_INVALID_ARGUMENT);
+    VerifyOrExit(apWriter != nullptr, /* no op */);
+
+    if (aAttributePathParams.mFieldId == kTestFieldId1)
+    {
+        err = apWriter->Put(TLV::ContextTag(kTestFieldId1), kTestFieldValue1);
+        SuccessOrExit(err);
+    }
+    if (aAttributePathParams.mFieldId == kTestFieldId2)
+    {
+        err = apWriter->Put(TLV::ContextTag(kTestFieldId2), kTestFieldValue2);
+        SuccessOrExit(err);
+    }
+
+exit:
+    ChipLogFunctError(err);
+    return err;
+}
+
 namespace reporting {
 class TestReportingEngine
 {
@@ -59,9 +90,11 @@ public:
 
 class TestExchangeDelegate : public Messaging::ExchangeDelegate
 {
-    void OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader, const PayloadHeader & payloadHeader,
-                           System::PacketBufferHandle payload) override
-    {}
+    CHIP_ERROR OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader,
+                                 const PayloadHeader & payloadHeader, System::PacketBufferHandle && payload) override
+    {
+        return CHIP_NO_ERROR;
+    }
 
     void OnResponseTimeout(Messaging::ExchangeContext * ec) override {}
 };
@@ -74,6 +107,8 @@ void TestReportingEngine::TestBuildAndSendSingleReportData(nlTestSuite * apSuite
     System::PacketBufferTLVWriter writer;
     System::PacketBufferHandle readRequestbuf = System::PacketBufferHandle::New(System::PacketBuffer::kMaxSize);
     ReadRequest::Builder readRequestBuilder;
+    AttributePathList::Builder attributePathListBuilder;
+    AttributePath::Builder attributePathBuilder;
 
     err = InteractionModelEngine::GetInstance()->Init(&gExchangeManager, nullptr);
     NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
@@ -84,6 +119,14 @@ void TestReportingEngine::TestBuildAndSendSingleReportData(nlTestSuite * apSuite
     writer.Init(std::move(readRequestbuf));
     err = readRequestBuilder.Init(&writer);
     NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
+    attributePathListBuilder = readRequestBuilder.CreateAttributePathListBuilder();
+    NL_TEST_ASSERT(apSuite, readRequestBuilder.GetError() == CHIP_NO_ERROR);
+    attributePathBuilder = attributePathListBuilder.CreateAttributePathBuilder();
+    NL_TEST_ASSERT(apSuite, attributePathListBuilder.GetError() == CHIP_NO_ERROR);
+    attributePathBuilder =
+        attributePathBuilder.NodeId(1).EndpointId(kTestEndpointId).ClusterId(kTestClusterId).FieldId(0).EndOfAttributePath();
+    NL_TEST_ASSERT(apSuite, attributePathBuilder.GetError() == CHIP_NO_ERROR);
+    attributePathListBuilder.EndOfAttributePathList();
     readRequestBuilder.EventNumber(1);
     NL_TEST_ASSERT(apSuite, readRequestBuilder.GetError() == CHIP_NO_ERROR);
     readRequestBuilder.EndOfReadRequest();
@@ -113,12 +156,16 @@ void InitializeChip(nlTestSuite * apSuite)
     err = chip::Platform::MemoryInit();
     NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
 
-    chip::gSystemLayer.Init(nullptr);
+    chip::gSystemLayer.Init();
 
-    err = chip::gSessionManager.Init(chip::kTestDeviceNodeId, &chip::gSystemLayer, &chip::gTransportManager, &admins);
+    err = chip::gSessionManager.Init(chip::kTestDeviceNodeId, &chip::gSystemLayer, &chip::gTransportManager, &admins,
+                                     &chip::gMessageCounterManager);
     NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
 
     err = chip::gExchangeManager.Init(&chip::gSessionManager);
+    NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
+
+    err = chip::gMessageCounterManager.Init(&chip::gExchangeManager);
     NL_TEST_ASSERT(apSuite, err == CHIP_NO_ERROR);
 }
 

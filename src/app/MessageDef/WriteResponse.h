@@ -26,11 +26,11 @@
 #include "Builder.h"
 
 #include "Parser.h"
+#include <app/util/basic-types.h>
 #include <core/CHIPCore.h>
 #include <core/CHIPTLV.h>
 #include <support/CodeUtils.h>
 #include <support/logging/CHIPLogging.h>
-#include <util/basic-types.h>
 
 namespace chip {
 namespace app {
@@ -94,6 +94,13 @@ public:
      *  @return A reference to AttributeStatusList::Builder
      */
     AttributeStatusList::Builder & CreateAttributeStatusListBuilder();
+
+    /**
+     *  @brief Get reference to AttributeStatusList::Builder
+     *
+     *  @return A reference to AttributeStatusList::Builder
+     */
+    AttributeStatusList::Builder & GetAttributeStatusListBuilder();
 
     /**
      *  @brief Mark the end of this WriteResponse

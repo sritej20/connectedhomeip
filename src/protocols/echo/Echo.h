@@ -47,7 +47,7 @@ enum class MsgType : uint8_t
     EchoResponse = 0x02
 };
 
-using EchoFunct = void (*)(Messaging::ExchangeContext * ec, System::PacketBufferHandle payload);
+using EchoFunct = void (*)(Messaging::ExchangeContext * ec, System::PacketBufferHandle && payload);
 
 class DLL_EXPORT EchoClient : public Messaging::ExchangeDelegate
 {
@@ -94,7 +94,8 @@ public:
      *         Other CHIP_ERROR codes as returned by the lower layers.
      *
      */
-    CHIP_ERROR SendEchoRequest(System::PacketBufferHandle && payload, const Messaging::SendFlags & sendFlags);
+    CHIP_ERROR SendEchoRequest(System::PacketBufferHandle && payload,
+                               const Messaging::SendFlags & sendFlags = Messaging::SendFlags(Messaging::SendMessageFlags::kNone));
 
 private:
     Messaging::ExchangeManager * mExchangeMgr = nullptr;
@@ -102,8 +103,8 @@ private:
     EchoFunct OnEchoResponseReceived          = nullptr;
     SecureSessionHandle mSecureSession;
 
-    void OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader, const PayloadHeader & payloadHeader,
-                           System::PacketBufferHandle payload) override;
+    CHIP_ERROR OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader,
+                                 const PayloadHeader & payloadHeader, System::PacketBufferHandle && payload) override;
     void OnResponseTimeout(Messaging::ExchangeContext * ec) override;
 };
 
@@ -144,8 +145,8 @@ private:
     Messaging::ExchangeManager * mExchangeMgr = nullptr;
     EchoFunct OnEchoRequestReceived           = nullptr;
 
-    void OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader, const PayloadHeader & payloadHeader,
-                           System::PacketBufferHandle payload) override;
+    CHIP_ERROR OnMessageReceived(Messaging::ExchangeContext * ec, const PacketHeader & packetHeader,
+                                 const PayloadHeader & payloadHeader, System::PacketBufferHandle && payload) override;
     void OnResponseTimeout(Messaging::ExchangeContext * ec) override {}
 };
 

@@ -21,41 +21,55 @@
 #include <core/CHIPPersistentStorageDelegate.h>
 #include <messaging/ExchangeMgr.h>
 #include <platform/CHIPDeviceLayer.h>
-#include <protocols/secure_channel/RendezvousSession.h>
+#include <protocols/secure_channel/RendezvousParameters.h>
+#include <protocols/secure_channel/SessionIDAllocator.h>
 
 namespace chip {
 
-class RendezvousServer : public RendezvousSessionDelegate
+class RendezvousServer : public SessionEstablishmentDelegate
 {
 public:
-    RendezvousServer();
-
     CHIP_ERROR WaitForPairing(const RendezvousParameters & params, Messaging::ExchangeManager * exchangeManager,
                               TransportMgrBase * transportMgr, SecureSessionMgr * sessionMgr, Transport::AdminPairingInfo * admin);
 
-    CHIP_ERROR Init(AppDelegate * delegate, PersistentStorageDelegate * storage)
+    CHIP_ERROR Init(AppDelegate * delegate, PersistentStorageDelegate * storage, SessionIDAllocator * idAllocator)
     {
         VerifyOrReturnError(storage != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
+        mStorage = storage;
+
+        VerifyOrReturnError(idAllocator != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
+        mIDAllocator = idAllocator;
+
+        // The caller may chose to not provide a delegate object. The RendezvousServer checks for null delegate before calling
+        // its methods.
         mDelegate = delegate;
-        mStorage  = storage;
         return CHIP_NO_ERROR;
     }
 
-    //////////////// RendezvousSessionDelegate Implementation ///////////////////
+    //////////// SessionEstablishmentDelegate Implementation ///////////////
+    void OnSessionEstablishmentError(CHIP_ERROR error) override;
+    void OnSessionEstablished() override;
 
-    void OnRendezvousConnectionOpened() override;
-    void OnRendezvousConnectionClosed() override;
-    void OnRendezvousError(CHIP_ERROR err) override;
-    void OnRendezvousMessageReceived(const PacketHeader & packetHeader, const Transport::PeerAddress & peerAddress,
-                                     System::PacketBufferHandle buffer) override;
-    void OnRendezvousComplete() override;
-    void OnRendezvousStatusUpdate(Status status, CHIP_ERROR err) override;
-    RendezvousSession * GetRendezvousSession() { return &mRendezvousSession; };
+    void Cleanup();
+
+    void OnPlatformEvent(const DeviceLayer::ChipDeviceEvent * event);
 
 private:
-    RendezvousSession mRendezvousSession;
     AppDelegate * mDelegate;
-    PersistentStorageDelegate * mStorage = nullptr;
+    PersistentStorageDelegate * mStorage          = nullptr;
+    Messaging::ExchangeManager * mExchangeManager = nullptr;
+
+    PASESession mPairingSession;
+    SecureSessionMgr * mSessionMgr = nullptr;
+
+    Transport::AdminPairingInfo * mAdmin = nullptr;
+
+    SessionIDAllocator * mIDAllocator = nullptr;
+
+    const RendezvousAdvertisementDelegate * mAdvDelegate;
+
+    bool HasAdvertisementDelegate() const { return mAdvDelegate != nullptr; }
+    const RendezvousAdvertisementDelegate * GetAdvertisementDelegate() const { return mAdvDelegate; }
 };
 
 } // namespace chip

@@ -42,14 +42,13 @@
 #include "level-control.h"
 
 // this file contains all the common includes for clusters in the util
-#include <app/Command.h>
+#include <app/CommandHandler.h>
+#include <app/common/gen/af-structs.h>
+#include <app/common/gen/attribute-id.h>
+#include <app/common/gen/attribute-type.h>
+#include <app/common/gen/cluster-id.h>
+#include <app/common/gen/command-id.h>
 #include <app/util/af.h>
-
-#include "gen/af-structs.h"
-#include "gen/attribute-id.h"
-#include "gen/attribute-type.h"
-#include "gen/cluster-id.h"
-#include "gen/command-id.h"
 
 #include <app/reporting/reporting.h>
 
@@ -139,8 +138,8 @@ static void deactivate(EndpointId endpoint)
 
 static EmberAfLevelControlState * getState(EndpointId endpoint)
 {
-    uint8_t ep = emberAfFindClusterServerEndpointIndex(endpoint, ZCL_LEVEL_CONTROL_CLUSTER_ID);
-    return (ep == 0xFF ? NULL : &stateTable[ep]);
+    uint16_t ep = emberAfFindClusterServerEndpointIndex(endpoint, ZCL_LEVEL_CONTROL_CLUSTER_ID);
+    return (ep == 0xFFFF ? NULL : &stateTable[ep]);
 }
 
 #if defined(ZCL_USING_LEVEL_CONTROL_CLUSTER_OPTIONS_ATTRIBUTE) && defined(EMBER_AF_PLUGIN_COLOR_CONTROL_SERVER_TEMP)
@@ -407,7 +406,7 @@ static bool shouldExecuteIfOff(EndpointId endpoint, CommandId commandId, uint8_t
 #endif
 }
 
-bool emberAfLevelControlClusterMoveToLevelCallback(chip::app::Command * commandObj, uint8_t level, uint16_t transitionTime,
+bool emberAfLevelControlClusterMoveToLevelCallback(chip::app::CommandHandler * commandObj, uint8_t level, uint16_t transitionTime,
                                                    uint8_t optionMask, uint8_t optionOverride)
 {
     emberAfLevelControlClusterPrintln("%pMOVE_TO_LEVEL %x %2x %x %x", "RX level-control:", level, transitionTime, optionMask,
@@ -417,7 +416,8 @@ bool emberAfLevelControlClusterMoveToLevelCallback(chip::app::Command * commandO
     return true;
 }
 
-bool emberAfLevelControlClusterMoveToLevelWithOnOffCallback(chip::app::Command * commandObj, uint8_t level, uint16_t transitionTime)
+bool emberAfLevelControlClusterMoveToLevelWithOnOffCallback(chip::app::CommandHandler * commandObj, uint8_t level,
+                                                            uint16_t transitionTime)
 {
     emberAfLevelControlClusterPrintln("%pMOVE_TO_LEVEL_WITH_ON_OFF %x %2x", "RX level-control:", level, transitionTime);
     moveToLevelHandler(ZCL_MOVE_TO_LEVEL_WITH_ON_OFF_COMMAND_ID, level, transitionTime, 0xFF, 0xFF,
@@ -425,22 +425,22 @@ bool emberAfLevelControlClusterMoveToLevelWithOnOffCallback(chip::app::Command *
     return true;
 }
 
-bool emberAfLevelControlClusterMoveCallback(chip::app::Command * commandObj, uint8_t moveMode, uint8_t rate, uint8_t optionMask,
-                                            uint8_t optionOverride)
+bool emberAfLevelControlClusterMoveCallback(chip::app::CommandHandler * commandObj, uint8_t moveMode, uint8_t rate,
+                                            uint8_t optionMask, uint8_t optionOverride)
 {
     emberAfLevelControlClusterPrintln("%pMOVE %x %x", "RX level-control:", moveMode, rate);
     moveHandler(ZCL_MOVE_COMMAND_ID, moveMode, rate, optionMask, optionOverride);
     return true;
 }
 
-bool emberAfLevelControlClusterMoveWithOnOffCallback(chip::app::Command * commandObj, uint8_t moveMode, uint8_t rate)
+bool emberAfLevelControlClusterMoveWithOnOffCallback(chip::app::CommandHandler * commandObj, uint8_t moveMode, uint8_t rate)
 {
     emberAfLevelControlClusterPrintln("%pMOVE_WITH_ON_OFF %x %x", "RX level-control:", moveMode, rate);
     moveHandler(ZCL_MOVE_WITH_ON_OFF_COMMAND_ID, moveMode, rate, 0xFF, 0xFF);
     return true;
 }
 
-bool emberAfLevelControlClusterStepCallback(chip::app::Command * commandObj, uint8_t stepMode, uint8_t stepSize,
+bool emberAfLevelControlClusterStepCallback(chip::app::CommandHandler * commandObj, uint8_t stepMode, uint8_t stepSize,
                                             uint16_t transitionTime, uint8_t optionMask, uint8_t optionOverride)
 {
     emberAfLevelControlClusterPrintln("%pSTEP %x %x %2x", "RX level-control:", stepMode, stepSize, transitionTime);
@@ -448,7 +448,7 @@ bool emberAfLevelControlClusterStepCallback(chip::app::Command * commandObj, uin
     return true;
 }
 
-bool emberAfLevelControlClusterStepWithOnOffCallback(chip::app::Command * commandObj, uint8_t stepMode, uint8_t stepSize,
+bool emberAfLevelControlClusterStepWithOnOffCallback(chip::app::CommandHandler * commandObj, uint8_t stepMode, uint8_t stepSize,
                                                      uint16_t transitionTime)
 {
     emberAfLevelControlClusterPrintln("%pSTEP_WITH_ON_OFF %x %x %2x", "RX level-control:", stepMode, stepSize, transitionTime);
@@ -456,14 +456,14 @@ bool emberAfLevelControlClusterStepWithOnOffCallback(chip::app::Command * comman
     return true;
 }
 
-bool emberAfLevelControlClusterStopCallback(chip::app::Command * commandObj, uint8_t optionMask, uint8_t optionOverride)
+bool emberAfLevelControlClusterStopCallback(chip::app::CommandHandler * commandObj, uint8_t optionMask, uint8_t optionOverride)
 {
     emberAfLevelControlClusterPrintln("%pSTOP", "RX level-control:");
     stopHandler(ZCL_STOP_COMMAND_ID, optionMask, optionOverride);
     return true;
 }
 
-bool emberAfLevelControlClusterStopWithOnOffCallback(chip::app::Command * commandObj)
+bool emberAfLevelControlClusterStopWithOnOffCallback(chip::app::CommandHandler * commandObj)
 {
     emberAfLevelControlClusterPrintln("%pSTOP_WITH_ON_OFF", "RX level-control:");
     stopHandler(ZCL_STOP_WITH_ON_OFF_COMMAND_ID, 0xFF, 0xFF);
@@ -707,6 +707,9 @@ static void moveHandler(CommandId commandId, uint8_t moveMode, uint8_t rate, uin
     // OnLevel is not used for Move commands.
     state->useOnLevel = false;
 
+    // storedLevel is not used for Move commands.
+    state->storedLevel = INVALID_STORED_LEVEL;
+
     // The setup was successful, so mark the new state as active and return.
     schedule(endpoint, state->eventDurationMs);
     status = EMBER_ZCL_STATUS_SUCCESS;
@@ -826,6 +829,9 @@ static void stepHandler(CommandId commandId, uint8_t stepMode, uint8_t stepSize,
 
     // OnLevel is not used for Step commands.
     state->useOnLevel = false;
+
+    // storedLevel is not used for Step commands
+    state->storedLevel = INVALID_STORED_LEVEL;
 
     // The setup was successful, so mark the new state as active and return.
     schedule(endpoint, state->eventDurationMs);

@@ -35,18 +35,20 @@ DEVICE_CONFIG = {
     'device0': {
         'type': 'CHIP-IM-Initiator',
         'base_image': 'chip_im_initiator',
-        'capability': ['Thread', 'Interactive'],
+        'capability': ['Thread', 'Interactive', 'TrafficControl'],
         'rcp_mode': True,
+        'traffic_control': {'latencyMs': 100}
     },
     'device1': {
         'type': 'CHIP-IM-Responder',
         'base_image': 'chip_im_responder',
-        'capability': ['Thread', 'Interactive'],
+        'capability': ['Thread', 'Interactive', 'TrafficControl'],
         'rcp_mode': True,
+        'traffic_control': {'latencyMs': 100}
     }
 }
 
-CHIP_PORT = 11097
+CHIP_PORT = 5540
 
 CIRQUE_URL = "http://localhost:5000"
 
@@ -71,7 +73,7 @@ class TestInteractionModel(CHIPVirtualHome):
 
         req_device_id = req_ids[0]
 
-        command = "chip-im-initiator {}"
+        command = "gdb -return-child-result -q -ex run -ex bt --args chip-im-initiator {}"
 
         for ip in resp_ips:
             ret = self.execute_device_cmd(

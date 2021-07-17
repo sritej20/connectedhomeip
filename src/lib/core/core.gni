@@ -44,13 +44,11 @@ declare_args() {
 
   # Memory management debug option: use dmalloc
   chip_config_memory_debug_dmalloc = false
-
-  # Overall experimental options for CHIP
-  chip_enable_interaction_model = false
 }
 
 if (chip_target_style == "") {
-  if (current_os != "freertos" && current_os != "zephyr") {
+  if (current_os != "freertos" && current_os != "zephyr" &&
+      current_os != "mbed") {
     chip_target_style = "unix"
   } else {
     chip_target_style = "embedded"

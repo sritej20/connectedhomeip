@@ -20,12 +20,12 @@
 
 #include <platform/CHIPDeviceLayer.h>
 
+#include <app/common/gen/att-storage.h>
+#include <app/common/gen/attribute-id.h>
+#include <app/common/gen/attribute-type.h>
+#include <app/common/gen/cluster-id.h>
 #include <app/util/af.h>
 #include <app/util/attribute-storage.h>
-#include <gen/att-storage.h>
-#include <gen/attribute-id.h>
-#include <gen/attribute-type.h>
-#include <gen/cluster-id.h>
 #include <protocols/interaction_model/Constants.h>
 
 #include <cstring>
@@ -46,16 +46,12 @@ uint8_t * MakeZclCharString(uint8_t (&zclString)[BufferLength], char (&cString)[
 
 void emberAfBasicClusterServerInitCallback(chip::EndpointId endpoint)
 {
-    uint16_t imVersion = chip::Protocols::InteractionModel::kVersion;
     uint16_t vendorId;
     uint16_t productId;
     uint16_t productRevision;
     uint32_t firmwareRevision;
     char cString[65];
     uint8_t zclString[65];
-
-    emberAfWriteAttribute(endpoint, ZCL_BASIC_CLUSTER_ID, ZCL_INTERACTION_MODEL_VERSION_ATTRIBUTE_ID, CLUSTER_MASK_SERVER,
-                          reinterpret_cast<uint8_t *>(&imVersion), ZCL_INT16U_ATTRIBUTE_TYPE);
 
     if (ConfigurationMgr().GetVendorName(cString, sizeof(cString)) == CHIP_NO_ERROR)
     {

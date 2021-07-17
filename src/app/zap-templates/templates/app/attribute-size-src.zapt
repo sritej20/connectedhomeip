@@ -1,13 +1,14 @@
 {{> header}}
 
+#include <app/common/gen/af-structs.h>
 #include <app/util/af.h>
+#include <app/util/attribute-list-byte-span.h>
 #include <app/util/basic-types.h>
 #include <support/SafeInt.h>
 #include <support/logging/CHIPLogging.h>
 
-#include "gen/af-structs.h"
-
 using namespace chip;
+using namespace chip::app::List;
 
 // The first 2 bytes specify the number of entries. A value of 0xFFFF means the list in invalid
 // and data is undefined.
@@ -52,7 +53,7 @@ uint16_t emberAfCopyList(ClusterId clusterId, EmberAfAttributeMetadata * am, boo
 
     if (!chip::CanCastTo<uint16_t>(index))
     {
-        ChipLogError(Zcl, "Index %l is invalid. Should be between 1 and 65534", index);
+        ChipLogError(Zcl, "Index %" PRId32 " is invalid. Should be between 1 and 65534", index);
         return 0;
     }
 
@@ -60,7 +61,7 @@ uint16_t emberAfCopyList(ClusterId clusterId, EmberAfAttributeMetadata * am, boo
     switch (clusterId)
     {
  {{#chip_server_clusters}}
- {{#if (chip_has_list_attributes)}}
+ {{#if (chip_server_has_list_attributes)}}
     case {{asHex code 4}}: // {{name}} Cluster
     {
         uint16_t entryOffset = kSizeLengthInBytes;
@@ -70,25 +71,57 @@ uint16_t emberAfCopyList(ClusterId clusterId, EmberAfAttributeMetadata * am, boo
         {{#if isList}}
             case {{asHex code 4}}: // {{name}}
             {
-                entryLength = {{size}};
+                {{#unless (isString type)}}
+                entryLength  = {{size}};
                 if (((index - 1) * entryLength) > (am->size - entryLength))
                 {
-                    ChipLogError(Zcl, "Index %l is invalid.", index);
+                    ChipLogError(Zcl, "Index %" PRId32 " is invalid.", index);
                     return 0;
                 }
                 entryOffset = static_cast<uint16_t>(entryOffset + ((index - 1) * entryLength));
+                {{/unless}}
                 {{#if isStruct}}
                 // Struct {{chipType}}
                 {{chipType}} * entry = reinterpret_cast<{{chipType}} *>(write ? src : dest);
                 {{#chip_attribute_list_entryTypes}}
                 {{#if (isString type)}}
-                copyListMember(write ? dest : (uint8_t *)&entry->{{name}}, write ? (uint8_t *)&entry->{{name}} : src, write, &entryOffset, {{maxLength}}); // {{type}}
+                chip::ByteSpan * {{name}}Span = &entry->{{name}}; // {{type}}
+                if (CHIP_NO_ERROR != (write ? WriteByteSpan(dest + entryOffset, {{size}}, {{name}}Span) : ReadByteSpan(src + entryOffset, {{size}}, {{name}}Span)))
+                {
+                    ChipLogError(Zcl, "Index %" PRId32 " is invalid. Not enough remaining space", index);
+                    return 0;
+                }
+                entryOffset = static_cast<uint16_t>(entryOffset + {{size}});
                 {{else}}
                 copyListMember(write ? dest : (uint8_t *)&entry->{{name}}, write ? (uint8_t *)&entry->{{name}} : src, write, &entryOffset, sizeof(entry->{{name}})); // {{type}}
                 {{/if}}
                 {{/chip_attribute_list_entryTypes}}
                 {{else}}
+                {{#if (isString type)}}
+                entryOffset = GetByteSpanOffsetFromIndex(write ? dest : src, am->size, static_cast<uint16_t>(index - 1));
+                if (entryOffset == 0)
+                {
+                    ChipLogError(Zcl, "Index %" PRId32 " is invalid.", index);
+                    return 0;
+                }
+
+                chip::ByteSpan * {{asCamelCased name}}Span   = reinterpret_cast<chip::ByteSpan *>(write ? src : dest); // {{type}}
+                uint16_t {{asCamelCased name}}RemainingSpace = static_cast<uint16_t>(am->size - entryOffset);
+                if (CHIP_NO_ERROR != (write ? WriteByteSpan(dest + entryOffset, {{asCamelCased name}}RemainingSpace, {{asCamelCased name}}Span) : ReadByteSpan(src + entryOffset, {{asCamelCased name}}RemainingSpace, {{asCamelCased name}}Span)))
+                {
+                    ChipLogError(Zcl, "Index %" PRId32 " is invalid. Not enough remaining space", index);
+                    return 0;
+                }
+
+                if (!CanCastTo<uint16_t>({{asCamelCased name}}Span->size()))
+                {
+                    ChipLogError(Zcl, "Span size %zu is too large", {{asCamelCased name}}Span->size());
+                    return 0;
+                }
+                entryLength = static_cast<uint16_t>({{asCamelCased name}}Span->size());
+                {{else}}
                 copyListMember(dest, src, write, &entryOffset, entryLength); // {{type}}
+                {{/if}}
                 {{/if}}
                 break;
             }
@@ -119,7 +152,7 @@ uint16_t emberAfAttributeValueListSize(ClusterId clusterId, AttributeId attribut
     switch (clusterId)
     {
 {{#chip_server_clusters}}
-{{#if (chip_has_list_attributes)}}
+{{#if (chip_server_has_list_attributes)}}
     case {{asHex code 4}}: // {{name}} Cluster
         switch (attributeId)
         {
@@ -131,7 +164,11 @@ uint16_t emberAfAttributeValueListSize(ClusterId clusterId, AttributeId attribut
             {{else}}
             // {{chipType}}
             {{/if}}
+            {{#if (isString type)}}
+            return GetByteSpanOffsetFromIndex(buffer, {{size}}, entryCount);
+            {{else}}
             entryLength = {{size}};
+            {{/if}}
             break;
         {{/if}}
         {{/chip_server_cluster_attributes}}
@@ -144,7 +181,7 @@ uint16_t emberAfAttributeValueListSize(ClusterId clusterId, AttributeId attribut
     uint32_t totalSize = kSizeLengthInBytes + (entryCount * entryLength);
     if (!chip::CanCastTo<uint16_t>(totalSize))
     {
-        ChipLogError(Zcl, "Cluster 0x%04x: Size of attribute 0x%02x is too large.", clusterId, attributeId);
+        ChipLogError(Zcl, "Cluster %" PRIx32 ": Size of attribute %" PRIx32 " is too large.", clusterId, attributeId);
         return 0;
     }
 

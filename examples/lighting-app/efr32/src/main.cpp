@@ -36,9 +36,8 @@
 #include <AppTask.h>
 
 #include "AppConfig.h"
-#include "DataModelHandler.h"
-#include "Server.h"
 #include "init_efrPlatform.h"
+#include <app/server/Server.h>
 
 #ifdef HEAP_MONITORING
 #include "MemMonitoring.h"
@@ -84,6 +83,11 @@ void appError(int err)
         ;
 }
 
+void appError(CHIP_ERROR error)
+{
+    appError(static_cast<int>(chip::ChipError::AsInteger(error)));
+}
+
 // ================================================================================
 // FreeRTOS Callbacks
 // ================================================================================
@@ -100,8 +104,6 @@ extern "C" void vApplicationIdleHook(void)
 // ================================================================================
 int main(void)
 {
-    int ret = CHIP_ERROR_MAX;
-
     init_efrPlatform();
     mbedtls_platform_set_calloc_free(CHIPPlatformMemoryCalloc, CHIPPlatformMemoryFree);
 
@@ -126,7 +128,7 @@ int main(void)
     chip::Platform::MemoryInit();
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgrImpl().Init();
 
-    ret = PlatformMgr().InitChipStack();
+    CHIP_ERROR ret = PlatformMgr().InitChipStack();
     if (ret != CHIP_NO_ERROR)
     {
         EFR32_LOG("PlatformMgr().InitChipStack() failed");

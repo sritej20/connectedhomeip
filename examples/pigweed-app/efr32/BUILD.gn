@@ -45,7 +45,7 @@ efr32_sdk("sdk") {
     "HAL_VCOM_ENABLE=1",
     "EFR32_LOG_ENABLED=1",
     "PW_RPC_ENABLED",
-    "SL_HEAP_SIZE=(10 * 1024)",
+    "SL_HEAP_SIZE=(16 * 1024)",
   ]
 }
 
@@ -79,6 +79,8 @@ efr32_executable("pigweed_app") {
   } else if (efr32_family == "efr32mg21") {
     ldscript = "${examples_plat_dir}/ldscripts/efr32-MG21.ld"
   }
+
+  inputs = [ ldscript ]
 
   ldflags = [ "-T" + rebase_path(ldscript, root_build_dir) ]
 

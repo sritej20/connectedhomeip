@@ -17,13 +17,9 @@
 
 #import <Foundation/Foundation.h>
 
-#ifdef __cplusplus
-#import <setup_payload/SetupPayload.h>
-#endif
-
 NS_ASSUME_NONNULL_BEGIN
 
-typedef NS_ENUM(NSUInteger, RendezvousInformationFlags) {
+typedef NS_ENUM(NSUInteger, CHIPRendezvousInformationFlags) {
     kRendezvousInformationNone = 0, // Device does not support any method for rendezvous
     kRendezvousInformationSoftAP = 1 << 0, // Device supports WiFi softAP
     kRendezvousInformationBLE = 1 << 1, // Device supports BLE
@@ -32,7 +28,14 @@ typedef NS_ENUM(NSUInteger, RendezvousInformationFlags) {
     kRendezvousInformationAllMask = kRendezvousInformationSoftAP | kRendezvousInformationBLE | kRendezvousInformationOnNetwork,
 };
 
-typedef NS_ENUM(NSUInteger, OptionalQRCodeInfoType) {
+typedef NS_ENUM(NSUInteger, CHIPCommissioningFlow) {
+    kCommissioningFlowStandard = 0, // Device automatically enters pairing mode upon power-up
+    kCommissioningFlowUserActionRequired = 1, // Device requires a user interaction to enter pairing mode
+    kCommissioningFlowCustom = 2, // Commissioning steps should be retrieved from the distributed compliance ledger
+    kCommissioningFlowInvalid = 3,
+};
+
+typedef NS_ENUM(NSUInteger, CHIPOptionalQRCodeInfoType) {
     kOptionalQRCodeInfoTypeUnknown,
     kOptionalQRCodeInfoTypeString,
     kOptionalQRCodeInfoTypeInt32
@@ -50,18 +53,13 @@ typedef NS_ENUM(NSUInteger, OptionalQRCodeInfoType) {
 @property (nonatomic, strong) NSNumber * version;
 @property (nonatomic, strong) NSNumber * vendorID;
 @property (nonatomic, strong) NSNumber * productID;
-@property (nonatomic, assign) BOOL requiresCustomFlow;
-@property (nonatomic, assign) RendezvousInformationFlags rendezvousInformation;
+@property (nonatomic, assign) CHIPCommissioningFlow commissioningFlow;
+@property (nonatomic, assign) CHIPRendezvousInformationFlags rendezvousInformation;
 @property (nonatomic, strong) NSNumber * discriminator;
 @property (nonatomic, strong) NSNumber * setUpPINCode;
 
 @property (nonatomic, strong) NSString * serialNumber;
-- (NSArray<CHIPOptionalQRCodeInfo *> *)getAllOptionalVendorData:(NSError * __autoreleasing *)error;
-
-#ifdef __cplusplus
-- (id)initWithSetupPayload:(chip::SetupPayload)setupPayload;
-- (RendezvousInformationFlags)valueOf:(chip::RendezvousInformationFlags)value;
-#endif
+- (nullable NSArray<CHIPOptionalQRCodeInfo *> *)getAllOptionalVendorData:(NSError * __autoreleasing *)error;
 
 @end
 

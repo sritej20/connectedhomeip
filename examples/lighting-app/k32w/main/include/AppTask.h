@@ -29,6 +29,14 @@
 #include "FreeRTOS.h"
 #include "timers.h"
 
+// Application-defined error codes in the CHIP_ERROR space.
+#define APP_ERROR_EVENT_QUEUE_FAILED CHIP_APPLICATION_ERROR(0x01)
+#define APP_ERROR_CREATE_TASK_FAILED CHIP_APPLICATION_ERROR(0x02)
+#define APP_ERROR_UNHANDLED_EVENT CHIP_APPLICATION_ERROR(0x03)
+#define APP_ERROR_CREATE_TIMER_FAILED CHIP_APPLICATION_ERROR(0x04)
+#define APP_ERROR_START_TIMER_FAILED CHIP_APPLICATION_ERROR(0x05)
+#define APP_ERROR_STOP_TIMER_FAILED CHIP_APPLICATION_ERROR(0x06)
+
 class AppTask
 {
 public:
@@ -63,6 +71,8 @@ private:
 
     static void ButtonEventHandler(uint8_t pin_no, uint8_t button_action);
     static void TimerEventHandler(TimerHandle_t xTimer);
+
+    static void ThreadProvisioningHandler(const chip::DeviceLayer::ChipDeviceEvent * event, intptr_t arg);
 
     static void ThreadStart();
     void StartTimer(uint32_t aTimeoutInMs);

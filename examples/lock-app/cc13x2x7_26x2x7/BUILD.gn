@@ -90,7 +90,7 @@ ti_simplelink_executable("lock_app") {
     ":sysconfig",
     "${chip_root}/examples/lock-app/lock-common",
     "${chip_root}/src/lib",
-    "${openthread_root}:libopenthread-cli-ftd",
+    "${openthread_root}:libopenthread-ftd",
   ]
 
   include_dirs = [
@@ -105,6 +105,8 @@ ti_simplelink_executable("lock_app") {
   ]
 
   ldscript = "${ti_simplelink_sdk_root}/source/ti/dmm/apps/common/freertos/cc13x2x7_cc26x2x7.lds"
+
+  inputs = [ ldscript ]
 
   ldflags = [
     "-L${ti_simplelink_sdk_root}/source",
