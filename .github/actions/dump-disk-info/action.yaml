@@ -11,7 +11,7 @@ runs:
       # wrapped action. This allow us to get the disk info usage before a job
       # is run and after the job is run regardless if the job succeeds or
       # fails.
-      uses: pyTooling/Actions/with-post-step@41364cfc6f3b879b802af27ffe979b8148aa4401 # v8.1.0
+      uses: pyTooling/Actions/with-post-step@41d80425d1a147841edcbf830d10a799ce7d96ab # v8.5.1
       if: ${{ runner.os == 'Linux' }}
       with:
         main: |-
